@@ -29,10 +29,8 @@ const makeWave = (
     const cpX = baseX + px * wave;
     const cpY = baseY + py * wave;
     const prevT = (i - 0.5) / segments;
-    const midX =
-      startX + dx * segLen * (i - 0.5) + px * Math.sin(prevT * Math.PI * 2.2) * amplitude;
-    const midY =
-      startY + dy * segLen * (i - 0.5) + py * Math.sin(prevT * Math.PI * 2.2) * amplitude;
+    const midX = startX + dx * segLen * (i - 0.5) + px * Math.sin(prevT * Math.PI * 2.2) * amplitude;
+    const midY = startY + dy * segLen * (i - 0.5) + py * Math.sin(prevT * Math.PI * 2.2) * amplitude;
     d += ` Q ${round(midX)} ${round(midY)} ${round(cpX)} ${round(cpY)}`;
   }
   return d;
@@ -40,7 +38,7 @@ const makeWave = (
 
 export function Hero() {
   return (
-    <section className="relative grid h-screen grid-cols-[50%_50%] overflow-hidden bg-[#0a2124] max-[1000px]:min-h-[850px] max-[1000px]:grid-cols-1 max-[700px]:min-h-[790px]">
+   <section className="relative grid min-h-screen grid-cols-[50%_50%] overflow-hidden bg-[#0a2124] max-[1000px]:min-h-[850px] max-[1000px]:grid-cols-1 max-[700px]:min-h-[790px]">
       <div className="relative z-[3] max-w-[700px] pb-[110px] pl-[8vw] pr-0 pt-[190px] max-[1000px]:max-w-[650px] max-[1000px]:px-[7vw] max-[1000px]:pb-20 max-[1000px]:pt-[160px] max-[700px]:pb-10 max-[700px]:pl-6 max-[700px]:pr-6 max-[700px]:pt-[125px]">
         <p
           className={`${eyebrow} opacity-0 animate-slide-1 max-[700px]:mb-3 transition-all duration-300 ease-out hover:translate-x-2 text-cream cursor-default`}

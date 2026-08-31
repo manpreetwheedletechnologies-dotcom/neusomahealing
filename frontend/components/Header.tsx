@@ -46,7 +46,7 @@ export function Header() {
         aria-label="NeusomaHealing Practice home"
       >
         <img
-          src={isLight ? "/logo_white.png" : "/logo.png"}
+          src={isLight ? "/no_bg_neusomalogo_1.png" : "/no_bg_neusomalogo_1.png"}
           alt="NeusomaHealing Practice — Heal. Regulate. Transform."
           className={[
             "block w-auto object-contain transition-[height] duration-300",
