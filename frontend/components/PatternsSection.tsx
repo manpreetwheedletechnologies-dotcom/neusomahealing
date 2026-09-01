@@ -153,7 +153,7 @@ export function PatternsSection() {
             mx-auto
             mt-[18px]
             max-w-[680px]
-            text-[13px]
+            text-[16px]
             leading-[1.55]
             text-[#716b62]
           "

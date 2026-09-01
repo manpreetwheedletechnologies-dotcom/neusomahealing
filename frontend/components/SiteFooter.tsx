@@ -17,13 +17,13 @@ export function SiteFooter() {
               className="inline-flex items-center"
             >
               <img
-                src="/logo_white.png"
+                src="/no_bg_neusomalogo_1.png"
                 alt="NeusomaHealing Practice — Heal. Regulate. Transform."
-                className="h-auto w-[245px] object-contain max-[700px]:w-[210px]"
+                className="h-auto w-[150px] object-contain max-[700px]:w-[120px]"
               />
             </a>
 
-            <p className="mt-7 max-w-[350px] text-[13px] leading-[1.9] text-[#9eb1aa]">
+            <p className="mt-7 max-w-[350px] text-[14px] leading-[1.9] text-[#9eb1aa]">
               A nervous-system informed approach to healing, regulation and
               meaningful transformation — helping you reconnect with yourself
               from the inside out.

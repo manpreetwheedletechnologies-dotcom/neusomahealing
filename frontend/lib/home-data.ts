@@ -19,7 +19,7 @@ export const journey = [
   ["SURVIVAL", "Old patterns", "Fear · Overwhelm"],
   ["SAFETY", "Awareness", "Compassion · Regulation"],
   ["SELF-TRUST", "Understanding", "Confidence · Resources"],
-  ["CHOICE", "New responses", "New behaviours · Possibilities"],
+  ["CHOICE", "New responses", "New behaviours · flexibility"],
   ["TRANSFORMATION", "Conscious living", "Freedom · Meaningful change"]
 ] as const;
 

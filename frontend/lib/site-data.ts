@@ -3,9 +3,9 @@
 // home-data.ts so the homepage is never touched by changes here.
 
 export const stats = [
-  ["500+", "Lives Transformed"],
+  ["500+", "Lives Supported"],
   ["800+", "Coaching Sessions"],
-  ["5+", "Years of Practice"],
+  ["2+", "Years of Practice"],
   ["100%", "Compassionate Commitment"],
 ] as const;
 
@@ -18,9 +18,9 @@ export const philosophy = [
 
 export const approach = [
   "New Code NLP",
-  "Emotional Intelligence",
-  "Cognitive Reframing",
-  "Nervous System-Aware Coaching",
+  "Nervous-System Awareness",
+  "Somatic Practices",
+  "Neuroscience-Informed Methods",
 ] as const;
 
 export type CoachingProgram = {
