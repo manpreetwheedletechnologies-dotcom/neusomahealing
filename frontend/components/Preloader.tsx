@@ -117,7 +117,13 @@ const NEURONS = [
   "n16",
 ];
 
-function GoldenParticleConvergence() {
+type GoldenParticleConvergenceProps = {
+  onComplete: () => void;
+};
+
+function GoldenParticleConvergence({
+  onComplete,
+}: GoldenParticleConvergenceProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -246,12 +252,22 @@ function GoldenParticleConvergence() {
       );
     }
 
-    function easeInExpo(value: number) {
-      if (value <= 0) return 0;
-      if (value >= 1) return 1;
+  function convergenceEase(value: number) {
+  const t = Math.min(
+    Math.max(value, 0),
+    1,
+  );
 
-      return Math.pow(2, 10 * value - 10);
-    }
+  return (
+    t < 0.45
+      ? 1.8 * t * t
+      : 1 -
+        Math.pow(
+          1 - t,
+          3.2,
+        )
+  );
+}
 
     function render(now: number) {
       const elapsed = now - startTime;
@@ -346,8 +362,9 @@ function GoldenParticleConvergence() {
          */
 
         const pull =
-          easeInExpo(rawProgress);
-
+  convergenceEase(
+    rawProgress,
+  );
         const dx =
           centerX - particle.startX;
 
@@ -453,7 +470,7 @@ function GoldenParticleConvergence() {
           particle.glow > 0.48
         ) {
           const previousPull =
-            easeInExpo(
+            convergenceEase(
               Math.max(
                 rawProgress - 0.018,
                 0,
@@ -531,9 +548,7 @@ function GoldenParticleConvergence() {
 
   return (
     <motion.div
-      className={
-        styles.particleConvergence
-      }
+      className={styles.particleConvergence}
       initial={{
         opacity: 1,
       }}
@@ -546,15 +561,16 @@ function GoldenParticleConvergence() {
         ],
       }}
       transition={{
-        duration: 2.05,
+        duration: 2.35,
         times: [
           0,
-          0.74,
-          0.91,
+          0.78,
+          0.94,
           1,
         ],
         ease: "easeOut",
       }}
+      onAnimationComplete={onComplete}
       aria-hidden="true"
     >
       <canvas
@@ -630,7 +646,7 @@ function GoldenParticleConvergence() {
 }
 
 export function Preloader({
-  minimumDuration = 4300,
+  minimumDuration = 4700,
 }: PreloaderProps) {
   const [
     isVisible,
@@ -641,6 +657,11 @@ export function Preloader({
     isLeaving,
     setIsLeaving,
   ] = useState(false);
+
+  const [
+  particleIntroDone,
+  setParticleIntroDone,
+] = useState(false);
 
   const mountedAt =
     useRef(Date.now());
@@ -867,7 +888,13 @@ export function Preloader({
     GOLDEN PARTICLE CONVERGENCE
 ================================================= */}
 
-<GoldenParticleConvergence />
+<GoldenParticleConvergence
+  onComplete={() =>
+    setParticleIntroDone(
+      true,
+    )
+  }
+/>
 
           {/* ================================================
               PERMANENT ORBIT AFTER INTRO
@@ -971,63 +998,71 @@ export function Preloader({
             {/* IMAGE MATERIALIZATION */}
 
             <motion.div
-              className={
-                styles.imageReveal
-              }
-              initial={{
-                opacity: 0,
+  className={
+    styles.imageReveal
+  }
+  initial={{
+    opacity: 0,
 
-                scale: 0.72,
+    scale: 0.72,
 
-                filter:
-                  "blur(24px) brightness(1.7)",
+    filter:
+      "blur(24px) brightness(1.7)",
 
-                clipPath:
-                  "circle(0% at 50% 46%)",
-              }}
-              animate={{
-                opacity: [
-                  0,
-                  0,
-                  1,
-                ],
+    clipPath:
+      "circle(0% at 50% 46%)",
+  }}
+  animate={
+    particleIntroDone
+      ? {
+          opacity: 1,
 
-                scale: [
-                  0.72,
-                  0.92,
-                  1.025,
-                  1,
-                ],
+          scale: [
+            0.72,
+            0.94,
+            1.025,
+            1,
+          ],
 
-                filter: [
-                  "blur(24px) brightness(1.7)",
-                  "blur(14px) brightness(1.45)",
-                  "blur(2px) brightness(1.08)",
-                  "blur(0px) brightness(1)",
-                ],
+          filter: [
+            "blur(24px) brightness(1.7)",
+            "blur(12px) brightness(1.38)",
+            "blur(2px) brightness(1.08)",
+            "blur(0px) brightness(1)",
+          ],
 
-                clipPath: [
-                  "circle(0% at 50% 46%)",
-                  "circle(14% at 50% 46%)",
-                  "circle(46% at 50% 46%)",
-                  "circle(76% at 50% 46%)",
-                ],
-              }}
-              transition={{
-                duration:
-                  1.25,
+          clipPath: [
+            "circle(0% at 50% 46%)",
+            "circle(18% at 50% 46%)",
+            "circle(50% at 50% 46%)",
+            "circle(76% at 50% 46%)",
+          ],
+        }
+      : {
+          opacity: 0,
 
-               delay: 1.82,
+          scale: 0.72,
 
-                ease: [
-                  0.16,
-                  1,
-                  0.3,
-                  1,
-                ],
-              }}
-            >
-              <motion.div
+          filter:
+            "blur(24px) brightness(1.7)",
+
+          clipPath:
+            "circle(0% at 50% 46%)",
+        }
+  }
+  transition={{
+    duration: 1.2,
+
+    delay: 0.04,
+
+    ease: [
+      0.16,
+      1,
+      0.3,
+      1,
+    ],
+  }}
+>              <motion.div
                 className={
                   styles.imageStage
                 }
@@ -1146,45 +1181,41 @@ export function Preloader({
             ================================================= */}
 
             <motion.div
-              className={
-                styles.brand
-              }
-              initial={{
-                opacity: 0,
-                y: 12,
-                filter:
-                  "blur(10px)",
-              }}
-              animate={{
-                opacity: [
-                  0,
-                  0,
-                  1,
-                ],
-
-                y: [
-                  12,
-                  12,
-                  0,
-                ],
-
-                filter: [
-                  "blur(10px)",
-                  "blur(10px)",
-                  "blur(0px)",
-                ],
-              }}
-              transition={{
-                duration: 1,
-                delay: 2.32,
-                ease: [
-                  0.16,
-                  1,
-                  0.3,
-                  1,
-                ],
-              }}
-            >
+  className={
+    styles.brand
+  }
+  initial={{
+    opacity: 0,
+    y: 12,
+    filter:
+      "blur(10px)",
+  }}
+  animate={
+    particleIntroDone
+      ? {
+          opacity: 1,
+          y: 0,
+          filter:
+            "blur(0px)",
+        }
+      : {
+          opacity: 0,
+          y: 12,
+          filter:
+            "blur(10px)",
+        }
+  }
+  transition={{
+    duration: 0.75,
+    delay: 0.72,
+    ease: [
+      0.16,
+      1,
+      0.3,
+      1,
+    ],
+  }}
+>
               <motion.p
                 className={
                   styles.brandName

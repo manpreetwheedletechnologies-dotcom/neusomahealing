@@ -8,6 +8,7 @@ import {
   BookingConfig,
   createBooking,
   getBookingAvailability,
+  getBookingCalendar,
   getBookingConfig,
 } from "@/lib/booking-api";
 import { buttonDark, eyebrow, sectionPadTop } from "@/lib/ui";
@@ -31,6 +32,14 @@ function formatDateKey(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatMonthKey(
+  date: Date,
+) {
+  return `${date.getFullYear()}-${String(
+    date.getMonth() + 1,
+  ).padStart(2, "0")}`;
 }
 
 function getMaximumDate(today: Date, monthsAhead: number) {
@@ -65,6 +74,20 @@ export default function BookSessionPage() {
 
   const [sessionType, setSessionType] = useState("");
   const [displayMonth, setDisplayMonth] = useState(() => startOfMonth(new Date()));
+  const [
+  enabledDates,
+  setEnabledDates,
+] = useState<string[]>([]);
+
+const [
+  isCalendarLoading,
+  setIsCalendarLoading,
+] = useState(false);
+
+const [
+  calendarError,
+  setCalendarError,
+] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [time, setTime] = useState("");
@@ -96,10 +119,84 @@ export default function BookSessionPage() {
       setIsConfigLoading(false);
     }
   };
+  /* =========================================
+   LOAD BOOKING CONFIG
+========================================= */
+
+useEffect(() => {
+  void loadConfig();
+}, []);
 
   useEffect(() => {
-    void loadConfig();
-  }, []);
+  let cancelled = false;
+
+  /*
+   * Session/month change means previous
+   * date/time selection is no longer valid.
+   */
+  setSelectedDate("");
+  setTime("");
+  setAvailableTimes([]);
+  setAvailabilityError("");
+  setCalendarError("");
+
+  if (!sessionType) {
+    setEnabledDates([]);
+    setIsCalendarLoading(false);
+
+    return () => {
+      cancelled = true;
+    };
+  }
+
+  async function loadCalendar() {
+    setIsCalendarLoading(true);
+
+    try {
+      const response =
+        await getBookingCalendar(
+          formatMonthKey(
+            displayMonth,
+          ),
+          sessionType,
+        );
+
+      if (cancelled) {
+        return;
+      }
+
+      setEnabledDates(
+        response.data.enabledDates ||
+          [],
+      );
+    } catch (error) {
+      if (cancelled) {
+        return;
+      }
+
+      setEnabledDates([]);
+
+      setCalendarError(
+        getErrorMessage(error),
+      );
+    } finally {
+      if (!cancelled) {
+        setIsCalendarLoading(
+          false,
+        );
+      }
+    }
+  }
+
+  void loadCalendar();
+
+  return () => {
+    cancelled = true;
+  };
+}, [
+  sessionType,
+  displayMonth,
+]);
 
   const monthLabel = useMemo(
     () =>
@@ -159,52 +256,56 @@ export default function BookSessionPage() {
     displayMonth.getTime() <
     maximumMonth.getTime();
 
-  const activeWeekdays = useMemo(() => {
-    const rawDays =
-      config?.activeWeekdays ?? [];
+    const enabledDateSet =
+  useMemo(
+    () =>
+      new Set(
+        enabledDates,
+      ),
+    [enabledDates],
+  );
 
-    const days = rawDays
-      .map((day) => Number(day))
-      .filter(
-        (day) =>
-          Number.isInteger(day) &&
-          day >= 0 &&
-          day <= 6,
-      );
 
-    // Invalid/empty backend config ki wajah se
-    // dates disable nahi hongi.
-    if (days.length === 0) {
-      return [0, 1, 2, 3, 4, 5, 6];
-    }
 
-    return days;
-  }, [config?.activeWeekdays]);
+ const isDateDisabled = (
+  date: Date,
+) => {
+  const dateKey =
+    formatDateKey(date);
 
-  const isDateDisabled = (date: Date) => {
-    const dateKey = formatDateKey(date);
+  /* Past */
+  if (
+    dateKey <
+    todayKey
+  ) {
+    return true;
+  }
 
-    // Past date
-    if (dateKey < todayKey) {
-      return true;
-    }
+  /* Outside booking horizon */
+  if (
+    dateKey >
+    maxDateKey
+  ) {
+    return true;
+  }
 
-    // Maximum booking range
-    if (dateKey > maxDateKey) {
-      return true;
-    }
+  /*
+   * User must select a session first.
+   */
+  if (!sessionType) {
+    return true;
+  }
 
-    // Allowed weekdays
-    if (
-      !activeWeekdays.includes(
-        date.getDay(),
-      )
-    ) {
-      return true;
-    }
-
-    return false;
-  };
+  /*
+   * MOST IMPORTANT:
+   *
+   * Date clickable ONLY when selected
+   * session has an available admin slot.
+   */
+  return !enabledDateSet.has(
+    dateKey,
+  );
+};
 
   const handlePreviousMonth = () => {
     if (!canGoPrevious) {
@@ -256,9 +357,10 @@ export default function BookSessionPage() {
 
     try {
       const response =
-        await getBookingAvailability(
-          dateKey,
-        );
+       await getBookingAvailability(
+  dateKey,
+  sessionType,
+);
 
       setAvailableTimes(
         response.data.availableTimes,
@@ -345,7 +447,11 @@ export default function BookSessionPage() {
 
       if (status === 409) {
         try {
-          const response = await getBookingAvailability(selectedDate);
+          const response =
+  await getBookingAvailability(
+    selectedDate,
+    sessionType,
+  );
           setAvailableTimes(response.data.availableTimes);
           setTime("");
         } catch {
@@ -432,7 +538,25 @@ export default function BookSessionPage() {
                           <button
                             type="button"
                             key={session.title}
-                            onClick={() => setSessionType(session.title)}
+                            onClick={() => {
+  if (
+    sessionType ===
+    session.title
+  ) {
+    return;
+  }
+
+  setSessionType(
+    session.title,
+  );
+
+  setSelectedDate("");
+  setTime("");
+  setAvailableTimes([]);
+
+  setAvailabilityError("");
+  setCalendarError("");
+}}
                             className={`block w-full rounded-xl border px-4 py-3 text-left transition-colors ${sessionType === session.title
                               ? "border-gold bg-[#fbeedb]"
                               : "border-line bg-white"
@@ -526,6 +650,11 @@ export default function BookSessionPage() {
                             const isSelected =
                               selectedDate === dateKey;
 
+                              const isAvailable =
+  enabledDateSet.has(
+    dateKey,
+  );
+
                             return (
                               <button
                                 type="button"
@@ -541,20 +670,62 @@ export default function BookSessionPage() {
     text-[11px]
     transition
 
-    ${isSelected
-                                    ? "bg-deep text-white"
-                                    : disabled
-                                      ? "cursor-not-allowed text-[#c9c1b3] opacity-55"
-                                      : "cursor-pointer text-ink hover:bg-[#eee2cd]"
-                                  }
+   ${isSelected
+  ? "bg-deep text-white shadow-[0_5px_16px_rgba(10,61,57,.20)]"
+  : isAvailable && !disabled
+    ? "cursor-pointer border border-gold bg-[#fbeedb] font-semibold text-[#8b6337] shadow-[0_4px_14px_rgba(190,139,70,.12)] hover:bg-[#f7e3c5]"
+    : "cursor-not-allowed text-[#c9c1b3] opacity-45"
+}
   `}
                               >
                                 {dayNumber}
+                                {isAvailable &&
+  !isSelected &&
+  !disabled && (
+    <span className="absolute bottom-[3px] left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-gold" />
+  )}
                               </button>
                             );
                           },
                         )}
                       </div>
+
+                      {/* =========================================
+    MONTH AVAILABILITY MESSAGE
+========================================= */}
+
+{isCalendarLoading && (
+  <div className="mt-4 rounded-xl border border-line bg-white px-4 py-3 text-center">
+    <p className="text-[11px] text-muted">
+      Checking available dates...
+    </p>
+  </div>
+)}
+
+{!isCalendarLoading &&
+  sessionType &&
+  !calendarError &&
+  enabledDates.length === 0 && (
+    <div className="mt-4 rounded-xl border border-[#ead8bd] bg-[#fff8ed] px-4 py-3 text-center">
+      <p className="text-[11px] font-semibold text-[#8c6438]">
+        No slot available in this month.
+      </p>
+
+      <p className="mt-1 text-[10px] leading-4 text-[#94816d]">
+        No {sessionType} sessions are
+        currently available in{" "}
+        {monthLabel}.
+      </p>
+    </div>
+  )}
+
+{calendarError && (
+  <div className="mt-4 rounded-xl border border-[#e4b8a9] bg-[#fff5f1] px-4 py-3 text-center">
+    <p className="text-[11px] text-[#8b4636]">
+      {calendarError}
+    </p>
+  </div>
+)}
                     </div>
 
                     <div>
@@ -562,11 +733,26 @@ export default function BookSessionPage() {
                         Available Times (IST)
                       </h3>
 
-                      {!selectedDate && (
-                        <p className="rounded-xl border border-line bg-white px-3 py-3 text-center text-[11px] leading-5 text-muted">
-                          Select a date to view available times.
-                        </p>
-                      )}
+                    {!selectedDate &&
+  !isCalendarLoading &&
+  enabledDates.length > 0 && (
+    <p className="rounded-xl border border-line bg-white px-3 py-3 text-center text-[11px] leading-5 text-muted">
+      Select a highlighted date
+      to view available{" "}
+      {sessionType} times.
+    </p>
+  )}
+
+{!selectedDate &&
+  !isCalendarLoading &&
+  sessionType &&
+  enabledDates.length === 0 && (
+    <p className="rounded-xl border border-line bg-white px-3 py-3 text-center text-[11px] leading-5 text-muted">
+      No available{" "}
+      {sessionType} slots in{" "}
+      {monthLabel}.
+    </p>
+  )}
 
                       {isAvailabilityLoading && (
                         <p className="rounded-xl border border-line bg-white px-3 py-3 text-center text-[11px] text-muted">

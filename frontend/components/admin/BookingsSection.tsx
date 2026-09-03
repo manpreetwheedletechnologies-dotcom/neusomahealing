@@ -40,15 +40,51 @@ export type Booking = {
   updatedAt?: string;
 };
 
+type SessionTypeOption = {
+  title: string;
+  duration: string;
+  bookingMode: "individual" | "webinar";
+  defaultCapacity: number;
+  isActive?: boolean;
+};
+
 type BookingConfig = {
+  sessionTypes: SessionTypeOption[];
   timeSlots: string[];
   timezone: string;
   maxMonthsAhead: number;
 };
 
+type AdminSlot = {
+  _id: string;
+  id?: string;
+
+  bookingDate: string;
+  timeSlot: string;
+
+  sessionType: string;
+  duration: string;
+
+  bookingMode: "individual" | "webinar";
+
+  capacity: number;
+  bookedCount: number;
+  remainingSeats: number;
+
+  isActive: boolean;
+};
+
 type AdminDateSlot = {
   bookingDate: string;
+
+  /*
+   * Backend temporarily returns this too
+   * for compatibility.
+   */
   timeSlots: string[];
+
+  slots: AdminSlot[];
+
   isActive: boolean;
 };
 
@@ -159,6 +195,36 @@ function time24To12(value: string) {
   )}:${minute} ${period}`;
 }
 
+
+function time12To24(value: string) {
+  const match =
+    /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(
+      value.trim(),
+    );
+
+  if (!match) return "";
+
+  let hour = Number(match[1]);
+
+  const minute = match[2];
+
+  const period =
+    match[3].toUpperCase();
+
+  if (hour === 12) {
+    hour = 0;
+  }
+
+  if (period === "PM") {
+    hour += 12;
+  }
+
+  return `${String(hour).padStart(
+    2,
+    "0",
+  )}:${minute}`;
+}
+
 function timeToMinutes(value: string) {
   const match =
     /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(value.trim());
@@ -231,23 +297,32 @@ export function BookingsSection({
   const [selectedDate, setSelectedDate] =
     useState("");
 
-  const [selectedTimes, setSelectedTimes] =
-    useState<string[]>([]);
+ 
 
-  const [customTime, setCustomTime] =
-    useState("");
+ 
 
-  const [slotLoading, setSlotLoading] =
-    useState(false);
+const [
+  selectedSessionType,
+  setSelectedSessionType,
+] = useState("");
 
-  const [slotSaving, setSlotSaving] =
-    useState(false);
+const [customTime, setCustomTime] =
+  useState("");
 
-  const [slotError, setSlotError] =
-    useState("");
+const [capacity, setCapacity] =
+  useState("1");
 
-  const [slotMessage, setSlotMessage] =
-    useState("");
+const [slotLoading, setSlotLoading] =
+  useState(false);
+
+const [slotSaving, setSlotSaving] =
+  useState(false);
+
+const [slotError, setSlotError] =
+  useState("");
+
+const [slotMessage, setSlotMessage] =
+  useState("");
 
   /* =========================
      BOOKING STATS
@@ -325,6 +400,30 @@ export function BookingsSection({
         }>("/bookings/config");
 
         setConfig(response.data);
+
+        setSelectedSessionType((current) => {
+  if (current) {
+    return current;
+  }
+
+  return (
+    response.data.sessionTypes?.[0]?.title ||
+    ""
+  );
+});
+
+const firstSession =
+  response.data.sessionTypes?.[0];
+
+if (firstSession) {
+  setCapacity(
+    firstSession.bookingMode === "webinar"
+      ? String(
+          firstSession.defaultCapacity || 100,
+        )
+      : "1",
+  );
+}
       } catch (error) {
         setSlotError(
           error instanceof Error
@@ -365,8 +464,8 @@ export function BookingsSection({
 
         setConfiguredDates(response.data.dates || []);
 
-        setSelectedDate("");
-        setSelectedTimes([]);
+       setSelectedDate("");
+setCustomTime("");
       } catch (error) {
         setConfiguredDates([]);
 
@@ -419,183 +518,440 @@ export function BookingsSection({
     [configuredDates],
   );
 
+
+  const selectedSession =
+  useMemo(() => {
+    return (
+      config?.sessionTypes.find(
+        (item) =>
+          item.title ===
+          selectedSessionType,
+      ) || null
+    );
+  }, [
+    config,
+    selectedSessionType,
+  ]);
+
+const selectedDateConfig =
+  selectedDate
+    ? openDateMap.get(
+        selectedDate,
+      )
+    : undefined;
+
+const selectedDateSlots =
+  selectedDateConfig?.slots || [];
+
   /*
    * Pending / confirmed / completed bookings occupy a slot.
    */
-  const reservedTimes = useMemo(() => {
-    if (!selectedDate) return new Set<string>();
 
-    return new Set(
-      items
-        .filter(
-          (item) =>
-            item.bookingDate === selectedDate &&
-            item.status !== "cancelled",
-        )
-        .map((item) => item.timeSlot),
-    );
-  }, [items, selectedDate]);
-
-  function selectCalendarDate(value: string) {
-    if (value < todayKey) return;
-
-    const existing = openDateMap.get(value);
-
-    setSelectedDate(value);
-    setSelectedTimes(
-      existing ? sortTimes(existing.timeSlots) : [],
-    );
-
-    setCustomTime("");
-    setSlotError("");
-    setSlotMessage("");
+function selectCalendarDate(
+  value: string,
+) {
+  if (value < todayKey) {
+    return;
   }
 
-  function toggleTime(time: string) {
-    /*
-     * Existing active booking cannot be removed
-     * from availability configuration.
-     */
-    if (reservedTimes.has(time)) return;
+  setSelectedDate(value);
 
-    setSelectedTimes((current) =>
-      current.includes(time)
-        ? current.filter((item) => item !== time)
-        : sortTimes([...current, time]),
-    );
+  setCustomTime("");
 
-    setSlotMessage("");
-  }
+  setSlotError("");
+  setSlotMessage("");
+}
 
-  function addCustomTime() {
-    const converted = time24To12(customTime);
+//   function toggleTime(time: string) {
+//     /*
+//      * Existing active booking cannot be removed
+//      * from availability configuration.
+//      */
+//     if (reservedTimes.has(time)) return;
 
-    if (!converted) return;
+//     setSelectedTimes((current) =>
+//       current.includes(time)
+//         ? current.filter((item) => item !== time)
+//         : sortTimes([...current, time]),
+//     );
 
-    setSelectedTimes((current) =>
-      sortTimes([...current, converted]),
-    );
+//     setSlotMessage("");
+//   }
 
-    setCustomTime("");
-    setSlotError("");
-  }
+//   function addCustomTime() {
+//     const converted = time24To12(customTime);
+
+//     if (!converted) return;
+
+//     setSelectedTimes((current) =>
+//       sortTimes([...current, converted]),
+//     );
+
+//     setCustomTime("");
+//     setSlotError("");
+//   }
 
   /* =========================================================
      SAVE DATE
   ========================================================= */
 
-  async function saveSlots() {
-    if (!selectedDate) {
-      setSlotError("Please select a date first.");
-      return;
-    }
+async function createSlot() {
+  if (!selectedDate) {
+    setSlotError(
+      "Please select a date first.",
+    );
 
-    if (selectedTimes.length === 0) {
+    return;
+  }
+
+  if (!selectedSessionType) {
+    setSlotError(
+      "Please select a session type.",
+    );
+
+    return;
+  }
+
+  if (!customTime) {
+    setSlotError(
+      "Please select a time.",
+    );
+
+    return;
+  }
+
+  const timeSlot =
+    time24To12(customTime);
+
+  if (!timeSlot) {
+    setSlotError(
+      "Please select a valid time.",
+    );
+
+    return;
+  }
+
+  let slotCapacity = 1;
+
+  if (
+    selectedSession?.bookingMode ===
+    "webinar"
+  ) {
+    slotCapacity =
+      Number(capacity);
+
+    if (
+      !Number.isInteger(
+        slotCapacity,
+      ) ||
+      slotCapacity < 1
+    ) {
       setSlotError(
-        "Please select or add at least one time slot.",
+        "Please enter a valid webinar capacity.",
       );
+
       return;
     }
+  }
 
-    setSlotSaving(true);
-    setSlotError("");
-    setSlotMessage("");
+  setSlotSaving(true);
 
-    try {
-      const response = await apiRequest<{
+  setSlotError("");
+  setSlotMessage("");
+
+  try {
+    const response =
+      await apiRequest<{
         success: boolean;
         message: string;
-        data: AdminDateSlot;
+        data: AdminSlot;
       }>(
-        `/bookings/admin/slots/${selectedDate}`,
+        "/bookings/admin/slots",
         {
-          method: "PUT",
-          body: JSON.stringify({
-            timeSlots: selectedTimes,
-          }),
+          method: "POST",
+
+          body:
+            JSON.stringify({
+              bookingDate:
+                selectedDate,
+
+              timeSlot,
+
+              sessionType:
+                selectedSessionType,
+
+              capacity:
+                slotCapacity,
+            }),
         },
       );
 
-      setConfiguredDates((current) => {
-        const withoutDate = current.filter(
-          (item) => item.bookingDate !== selectedDate,
+    const created =
+      response.data;
+
+    /*
+     * Update calendar + selected date
+     * without another API request.
+     */
+    setConfiguredDates(
+      (current) => {
+        const existing =
+          current.find(
+            (item) =>
+              item.bookingDate ===
+              created.bookingDate,
+          );
+
+        if (!existing) {
+          return [
+            ...current,
+
+            {
+              bookingDate:
+                created.bookingDate,
+
+              timeSlots: [
+                created.timeSlot,
+              ],
+
+              slots: [
+                created,
+              ],
+
+              isActive:
+                true,
+            },
+          ].sort(
+            (a, b) =>
+              a.bookingDate.localeCompare(
+                b.bookingDate,
+              ),
+          );
+        }
+
+        const updatedSlots = [
+          ...existing.slots,
+          created,
+        ].sort(
+          (a, b) =>
+            timeToMinutes(
+              a.timeSlot,
+            ) -
+            timeToMinutes(
+              b.timeSlot,
+            ),
         );
 
-        return [...withoutDate, response.data].sort((a, b) =>
-          a.bookingDate.localeCompare(b.bookingDate),
+        return current.map(
+          (item) =>
+            item.bookingDate ===
+            created.bookingDate
+              ? {
+                  ...item,
+
+                  slots:
+                    updatedSlots,
+
+                  timeSlots:
+                    updatedSlots.map(
+                      (slot) =>
+                        slot.timeSlot,
+                    ),
+
+                  isActive:
+                    true,
+                }
+              : item,
         );
-      });
+      },
+    );
 
-      setSelectedTimes(response.data.timeSlots);
+    setCustomTime("");
 
-      setSlotMessage(response.message);
-    } catch (error) {
-      setSlotError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save slots.",
-      );
-    } finally {
-      setSlotSaving(false);
-    }
+    setSlotMessage(
+      response.message,
+    );
+  } catch (error) {
+    setSlotError(
+      error instanceof Error
+        ? error.message
+        : "Unable to create session slot.",
+    );
+  } finally {
+    setSlotSaving(false);
   }
+}
+
+async function removeSlot(
+  slot: AdminSlot,
+) {
+  if (
+    slot.bookedCount >
+    0
+  ) {
+    setSlotError(
+      "This session already has active bookings. Cancel them before deleting the slot.",
+    );
+
+    return;
+  }
+
+  if (
+    !window.confirm(
+      `Remove ${slot.sessionType} at ${slot.timeSlot}?`,
+    )
+  ) {
+    return;
+  }
+
+  setSlotSaving(true);
+
+  setSlotError("");
+  setSlotMessage("");
+
+  try {
+    const response =
+      await apiRequest<{
+        success: boolean;
+        message: string;
+      }>(
+        `/bookings/admin/slots/${slot._id}`,
+        {
+          method:
+            "DELETE",
+        },
+      );
+
+    setConfiguredDates(
+      (current) =>
+        current
+          .map((item) => {
+            if (
+              item.bookingDate !==
+              slot.bookingDate
+            ) {
+              return item;
+            }
+
+            const remaining =
+              item.slots.filter(
+                (itemSlot) =>
+                  itemSlot._id !==
+                  slot._id,
+              );
+
+            return {
+              ...item,
+
+              slots:
+                remaining,
+
+              timeSlots:
+                remaining.map(
+                  (itemSlot) =>
+                    itemSlot.timeSlot,
+                ),
+
+              isActive:
+                remaining.length >
+                0,
+            };
+          })
+          .filter(
+            (item) =>
+              item.slots.length >
+              0,
+          ),
+    );
+
+    setSlotMessage(
+      response.message,
+    );
+  } catch (error) {
+    setSlotError(
+      error instanceof Error
+        ? error.message
+        : "Unable to remove session slot.",
+    );
+  } finally {
+    setSlotSaving(false);
+  }
+}
 
   /* =========================================================
      CLOSE DATE
   ========================================================= */
 
-  async function closeDate() {
-    if (!selectedDate) return;
+ async function closeDate() {
+  if (!selectedDate) {
+    return;
+  }
 
-    if (reservedTimes.size > 0) {
-      setSlotError(
-        "This date has active bookings. Cancel them before closing this date.",
-      );
-      return;
-    }
+  const hasActiveBookings =
+    selectedDateSlots.some(
+      (slot) =>
+        slot.bookedCount >
+        0,
+    );
 
-    if (
-      !window.confirm(
-        `Close all booking slots for ${formatDate(
-          selectedDate,
-        )}?`,
-      )
-    ) {
-      return;
-    }
+  if (hasActiveBookings) {
+    setSlotError(
+      "This date has active bookings. Cancel them before closing this date.",
+    );
 
-    setSlotSaving(true);
-    setSlotError("");
+    return;
+  }
 
-    try {
-      const response = await apiRequest<{
+  if (
+    !window.confirm(
+      `Close all booking sessions for ${formatDate(
+        selectedDate,
+      )}?`,
+    )
+  ) {
+    return;
+  }
+
+  setSlotSaving(true);
+
+  setSlotError("");
+  setSlotMessage("");
+
+  try {
+    const response =
+      await apiRequest<{
         success: boolean;
         message: string;
       }>(
-        `/bookings/admin/slots/${selectedDate}`,
+        `/bookings/admin/date/${selectedDate}`,
         {
-          method: "DELETE",
+          method:
+            "DELETE",
         },
       );
 
-      setConfiguredDates((current) =>
+    setConfiguredDates(
+      (current) =>
         current.filter(
-          (item) => item.bookingDate !== selectedDate,
+          (item) =>
+            item.bookingDate !==
+            selectedDate,
         ),
-      );
+    );
 
-      setSelectedTimes([]);
-      setSlotMessage(response.message);
-    } catch (error) {
-      setSlotError(
-        error instanceof Error
-          ? error.message
-          : "Unable to close this date.",
-      );
-    } finally {
-      setSlotSaving(false);
-    }
+    setSlotMessage(
+      response.message,
+    );
+  } catch (error) {
+    setSlotError(
+      error instanceof Error
+        ? error.message
+        : "Unable to close this date.",
+    );
+  } finally {
+    setSlotSaving(false);
   }
+}
 
   /* =========================================================
      STATUS
@@ -994,9 +1350,9 @@ export function BookingsSection({
                 <>
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#a87943]">
-                        Available Times
-                      </p>
+                     <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#a87943]">
+  Configure Sessions
+</p>
 
                       <h3 className="mt-1 font-serif text-2xl">
                         {formatDate(selectedDate)}
@@ -1018,139 +1374,367 @@ export function BookingsSection({
                       </button>
                     )}
                   </div>
+{/* =============================================
+    SESSION TYPE
+============================================= */}
 
-                  {/* DEFAULT TIMES */}
+<div className="mt-6">
+  <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[.13em] text-[#89948f]">
+    Session Type
+  </label>
 
-                  {config?.timeSlots?.length ? (
-                    <div className="mt-6">
-                      <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.13em] text-[#89948f]">
-                        Quick slots
-                      </p>
+  <select
+    value={
+      selectedSessionType
+    }
+    onChange={(e) => {
+      const value =
+        e.target.value;
 
-                      <div className="flex flex-wrap gap-2">
-                        {config.timeSlots.map((time) => {
-                          const selected =
-                            selectedTimes.includes(time);
+      setSelectedSessionType(
+        value,
+      );
 
-                          const reserved =
-                            reservedTimes.has(time);
+      const session =
+        config?.sessionTypes.find(
+          (item) =>
+            item.title ===
+            value,
+        );
 
-                          return (
-                            <button
-                              type="button"
-                              key={time}
-                              onClick={() => toggleTime(time)}
-                              className={`rounded-full border px-3.5 py-2 text-[11px] font-semibold transition ${
-                                reserved
-                                  ? "cursor-not-allowed border-[#e4d6c0] bg-[#f8eee0] text-[#9b7041]"
-                                  : selected
-                                    ? "border-[#0b5149] bg-[#edf7f4] text-[#176b5d]"
-                                    : "border-[#d9dfda] bg-[#f8faf8] text-[#617069] hover:border-[#b58a58]"
-                              }`}
-                            >
-                              {time}
-                              {reserved ? " · Booked" : ""}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
+      setCapacity(
+        session?.bookingMode ===
+          "webinar"
+          ? String(
+              session.defaultCapacity ||
+                100,
+            )
+          : "1",
+      );
 
-                  {/* CURRENT SELECTED TIMES */}
+      setSlotError("");
+      setSlotMessage("");
+    }}
+    className="w-full rounded-xl border border-[#d9dfda] bg-[#f8faf8] px-4 py-3 text-xs font-semibold outline-none focus:border-[#a87943]"
+  >
+    <option value="">
+      Select session
+    </option>
 
-                  <div className="mt-6">
-                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.13em] text-[#89948f]">
-                      Slots for this date
-                    </p>
+    {config?.sessionTypes.map(
+      (session) => (
+        <option
+          key={session.title}
+          value={session.title}
+        >
+          {session.title} ·{" "}
+          {session.duration}
+        </option>
+      ),
+    )}
+  </select>
+</div>
 
-                    <div className="flex min-h-[45px] flex-wrap gap-2">
-                      {selectedTimes.length === 0 ? (
-                        <p className="text-xs text-[#8a9590]">
-                          No time slots selected.
-                        </p>
-                      ) : (
-                        selectedTimes.map((time) => (
-                          <button
-                            type="button"
-                            key={time}
-                            disabled={reservedTimes.has(time)}
-                            onClick={() => toggleTime(time)}
-                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] ${
-                              reservedTimes.has(time)
-                                ? "cursor-not-allowed border-[#eadcc7] bg-[#fbf3e8] text-[#966b3b]"
-                                : "border-[#cddbd6] bg-[#eef6f3] text-[#315c52]"
-                            }`}
-                          >
-                            {time}
+{/* =============================================
+    QUICK TIMES
+============================================= */}
 
-                            {reservedTimes.has(time) ? (
-                              <span className="text-[9px]">
-                                Booked
-                              </span>
-                            ) : (
-                              <X size={12} />
-                            )}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
+{config?.timeSlots?.length ? (
+  <div className="mt-6">
+    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.13em] text-[#89948f]">
+      Quick Times
+    </p>
 
-                  {/* CUSTOM TIME */}
+    <div className="flex flex-wrap gap-2">
+      {config.timeSlots.map(
+        (time) => {
+          const selected =
+            customTime ===
+            time12To24(
+              time,
+            );
 
-                  <div className="mt-6">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.13em] text-[#89948f]">
-                      Add custom time
-                    </p>
+          return (
+            <button
+              type="button"
+              key={time}
+              onClick={() => {
+                setCustomTime(
+                  time12To24(
+                    time,
+                  ),
+                );
 
-                    <div className="flex gap-2">
-                      <input
-                        type="time"
-                        value={customTime}
-                        onChange={(e) => setCustomTime(e.target.value)}
-                        className="flex-1 rounded-xl border border-[#d9dfda] bg-[#f8faf8] px-4 py-3 text-xs outline-none focus:border-[#a87943]"
-                      />
+                setSlotError("");
+                setSlotMessage("");
+              }}
+              className={`rounded-full border px-3.5 py-2 text-[11px] font-semibold transition ${
+                selected
+                  ? "border-[#0b5149] bg-[#edf7f4] text-[#176b5d]"
+                  : "border-[#d9dfda] bg-[#f8faf8] text-[#617069] hover:border-[#b58a58]"
+              }`}
+            >
+              {time}
+            </button>
+          );
+        },
+      )}
+    </div>
+  </div>
+) : null}
 
-                      <button
-                        type="button"
-                        disabled={!customTime}
-                        onClick={addCustomTime}
-                        className="inline-flex items-center gap-2 rounded-xl border border-[#cad5cf] px-4 py-3 text-xs font-semibold text-[#40534c] transition hover:bg-[#eef4f1] disabled:opacity-40"
-                      >
-                        <Plus size={14} />
-                        Add
-                      </button>
-                    </div>
-                  </div>
+{/* =============================================
+    TIME
+============================================= */}
 
-                  {slotError && (
-                    <p className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
-                      {slotError}
-                    </p>
-                  )}
+<div className="mt-6">
+  <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[.13em] text-[#89948f]">
+    Session Time
+  </label>
 
-                  {slotMessage && (
-                    <p className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                      {slotMessage}
-                    </p>
-                  )}
+  <input
+    type="time"
+    value={customTime}
+    onChange={(e) => {
+      setCustomTime(
+        e.target.value,
+      );
 
-                  <button
-                    type="button"
-                    disabled={
-                      slotSaving ||
-                      selectedTimes.length === 0
+      setSlotError("");
+      setSlotMessage("");
+    }}
+    className="w-full rounded-xl border border-[#d9dfda] bg-[#f8faf8] px-4 py-3 text-xs outline-none focus:border-[#a87943]"
+  />
+</div>
+
+{/* =============================================
+    CAPACITY
+============================================= */}
+
+<div className="mt-6">
+  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.13em] text-[#89948f]">
+    Capacity
+  </p>
+
+  {selectedSession?.bookingMode ===
+  "webinar" ? (
+    <>
+      <input
+        type="number"
+        min={1}
+        max={10000}
+        value={capacity}
+        onChange={(e) =>
+          setCapacity(
+            e.target.value,
+          )
+        }
+        className="w-full rounded-xl border border-[#d9dfda] bg-[#f8faf8] px-4 py-3 text-xs outline-none focus:border-[#a87943]"
+      />
+
+      <p className="mt-2 text-[10px] leading-4 text-[#85908b]">
+        Webinar allows multiple
+        registrations. Final Zoom
+        participant limit will later be
+        validated against your Zoom plan.
+      </p>
+    </>
+  ) : (
+    <div className="rounded-xl border border-[#d9dfda] bg-[#f8faf8] px-4 py-3">
+      <p className="text-xs font-semibold text-[#47564f]">
+        1 participant
+      </p>
+
+      <p className="mt-1 text-[10px] text-[#89948f]">
+        Individual sessions can only
+        be booked by one client.
+      </p>
+    </div>
+  )}
+</div>
+
+{/* =============================================
+    ERRORS / SUCCESS
+============================================= */}
+
+{slotError && (
+  <p className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
+    {slotError}
+  </p>
+)}
+
+{slotMessage && (
+  <p className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
+    {slotMessage}
+  </p>
+)}
+
+{/* =============================================
+    CREATE SESSION
+============================================= */}
+
+<button
+  type="button"
+  disabled={
+    slotSaving ||
+    !selectedSessionType ||
+    !customTime
+  }
+  onClick={() =>
+    void createSlot()
+  }
+  className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b3b38] px-5 py-3.5 text-xs font-semibold text-white transition hover:bg-[#124c47] disabled:cursor-not-allowed disabled:opacity-50"
+>
+  <Plus size={15} />
+
+  {slotSaving
+    ? "Creating session..."
+    : "Add Session Slot"}
+</button>
+
+{/* =============================================
+    CONFIGURED SESSIONS
+============================================= */}
+
+<div className="mt-8 border-t border-[#e2e6e2] pt-6">
+  <div className="flex items-center justify-between gap-3">
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[.13em] text-[#89948f]">
+        Configured Sessions
+      </p>
+
+      <p className="mt-1 text-[11px] text-[#89948f]">
+        {selectedDateSlots.length}{" "}
+        session
+        {selectedDateSlots.length ===
+        1
+          ? ""
+          : "s"}{" "}
+        configured
+      </p>
+    </div>
+  </div>
+
+  <div className="mt-4 space-y-3">
+    {selectedDateSlots.length ===
+    0 ? (
+      <div className="rounded-2xl border border-dashed border-[#d9dfda] bg-[#fafbf9] p-5 text-center">
+        <p className="text-xs text-[#84908a]">
+          No sessions configured
+          for this date yet.
+        </p>
+      </div>
+    ) : (
+      selectedDateSlots.map(
+        (slot) => (
+          <div
+            key={slot._id}
+            className="rounded-2xl border border-[#dce1dc] bg-[#fbfcfa] p-4"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-[#31433c]">
+                    {
+                      slot.sessionType
                     }
-                    onClick={() => void saveSlots()}
-                    className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b3b38] px-5 py-3.5 text-xs font-semibold text-white transition hover:bg-[#124c47] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Save size={15} />
+                  </p>
 
-                    {slotSaving
-                      ? "Saving availability..."
-                      : "Save Availability"}
-                  </button>
+                  {slot.bookingMode ===
+                    "webinar" && (
+                    <span className="rounded-full border border-[#e4cfaa] bg-[#fff7e9] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-[#9a6d31]">
+                      Webinar
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-[#74817b]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock3
+                      size={12}
+                    />
+                    {
+                      slot.timeSlot
+                    }
+                  </span>
+
+                  {slot.duration && (
+                    <span>
+                      {
+                        slot.duration
+                      }
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={
+                  slotSaving ||
+                  slot.bookedCount >
+                    0
+                }
+                title={
+                  slot.bookedCount >
+                  0
+                    ? "Cancel active bookings before removing this slot."
+                    : "Remove session"
+                }
+                onClick={() =>
+                  void removeSlot(
+                    slot,
+                  )
+                }
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-red-100 bg-white text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-xl bg-white p-3">
+                <p className="text-[8px] font-semibold uppercase tracking-wide text-[#919b96]">
+                  Capacity
+                </p>
+
+                <p className="mt-1 text-xs font-bold text-[#40534c]">
+                  {
+                    slot.capacity
+                  }
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-white p-3">
+                <p className="text-[8px] font-semibold uppercase tracking-wide text-[#919b96]">
+                  Booked
+                </p>
+
+                <p className="mt-1 text-xs font-bold text-[#40534c]">
+                  {
+                    slot.bookedCount
+                  }
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-white p-3">
+                <p className="text-[8px] font-semibold uppercase tracking-wide text-[#919b96]">
+                  Remaining
+                </p>
+
+                <p className="mt-1 text-xs font-bold text-[#40534c]">
+                  {
+                    slot.remainingSeats
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        ),
+      )
+    )}
+  </div>
+</div>
                 </>
               )}
             </div>

@@ -1,6 +1,14 @@
 export type SessionTypeOption = {
   title: string;
+
   duration: string;
+
+  bookingMode:
+    | "individual"
+    | "webinar";
+
+  defaultCapacity: number;
+
   isActive?: boolean;
 };
 
@@ -75,15 +83,61 @@ export async function getBookingConfig() {
   }>("/bookings/config");
 }
 
-export async function getBookingAvailability(date: string) {
+export async function getBookingCalendar(
+  month: string,
+  sessionType: string,
+) {
+  const params =
+    new URLSearchParams({
+      month,
+      sessionType,
+    });
+
   return request<{
     success: true;
+
     data: {
-      date: string;
-      availableTimes: string[];
+      month: string;
+
+      sessionType:
+        string | null;
+
+      enabledDates: string[];
+
+      hasAvailability: boolean;
+
       timezone: string;
     };
-  }>(`/bookings/availability?date=${encodeURIComponent(date)}`);
+  }>(
+    `/bookings/calendar?${params.toString()}`,
+  );
+}
+
+export async function getBookingAvailability(
+  date: string,
+  sessionType: string,
+) {
+  const params =
+    new URLSearchParams({
+      date,
+      sessionType,
+    });
+
+  return request<{
+    success: true;
+
+    data: {
+      date: string;
+
+      availableTimes: string[];
+
+      availableSessionTypes: string[];
+
+      timezone: string;
+    };
+  }>(
+    `/bookings/availability?${params.toString()}`,
+  );
 }
 
 export async function createBooking(payload: CreateBookingPayload) {
