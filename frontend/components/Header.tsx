@@ -32,7 +32,7 @@ export function Header() {
   return (
     <header
       className={[
-        "fixed left-1/2 top-0 z-[100] -translate-x-1/2 font-sans",
+        "fixed left-1/2 top-0 z-[20000] -translate-x-1/2 font-sans",
         "flex items-center justify-between gap-8",
         "transition-[width,margin-top,padding,border-radius,background,border-color,box-shadow,backdrop-filter] duration-[450ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
         scrolled

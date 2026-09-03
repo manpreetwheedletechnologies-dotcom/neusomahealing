@@ -2,7 +2,8 @@ import { Header } from "@/components/Header";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Reveal } from "@/components/Reveal";
 import { contactInfo } from "@/lib/site-data";
-import { buttonDark, eyebrow, sectionPadTop } from "@/lib/ui";
+import { eyebrow, sectionPadTop } from "@/lib/ui";
+import { ContactForm } from "@/components/ContactForm";
 
 export const metadata = { title: "Contact — NeusomaHealing Practice" };
 
@@ -52,31 +53,7 @@ export default function ContactPage() {
         </Reveal>
 
         <Reveal>
-          <form className="relative space-y-4 overflow-hidden rounded-[22px] border border-line bg-[#fffaf3] p-8">
-            <input
-              className="w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none placeholder:text-muted"
-              placeholder="Your Name"
-            />
-            <input
-              className="w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none placeholder:text-muted"
-              placeholder="Email Address"
-            />
-            <input
-              className="w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none placeholder:text-muted"
-              placeholder="Phone Number"
-            />
-            <input
-              className="w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none placeholder:text-muted"
-              placeholder="Subject"
-            />
-            <textarea
-              className="h-32 w-full resize-none rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none placeholder:text-muted"
-              placeholder="Your Message"
-            />
-            <button type="button" className={`${buttonDark} w-full justify-center py-4`}>
-              Send Message
-            </button>
-          </form>
+          <ContactForm />
         </Reveal>
       </section>
 
