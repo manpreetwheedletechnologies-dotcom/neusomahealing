@@ -4,6 +4,7 @@ import { Reveal } from "@/components/Reveal";
 import { PhotoBlock } from "@/components/PhotoBlock";
 import { approach, philosophy, stats } from "@/lib/site-data";
 import { buttonDark, eyebrow, sectionPad, sectionPadTop } from "@/lib/ui";
+import Link from "next/link";
 
 export const metadata = { title: "About — NeusomaHealing Practice" };
 
@@ -146,9 +147,9 @@ export default function AboutPage() {
       <section className="bg-[#f0e8dc] px-[max(5vw,32px)] py-[70px] text-center">
         <Reveal>
           <h2 className="mb-6 font-serif text-3xl font-medium">Ready to begin your own journey?</h2>
-          <a className={buttonDark} href="/book-session">
+          <Link className={buttonDark} href="/book-session">
             Book a Session <span>↗</span>
-          </a>
+          </Link>
         </Reveal>
       </section>
 
