@@ -1,3 +1,4 @@
+import Link from "next/link";
 export function SiteFooter() {
   return (
     <footer className="relative overflow-hidden bg-[#062f2d] text-[#c4d0c8]">
@@ -11,17 +12,17 @@ export function SiteFooter() {
 
           {/* Brand */}
           <div className="pr-10 max-[1000px]:pr-0">
-            <a
-              href="/"
-              aria-label="NeusomaHealing Practice home"
-              className="inline-flex items-center"
-            >
-              <img
-                src="/no_bg_neusomalogo_1.png"
-                alt="NeusomaHealing Practice — Heal. Regulate. Transform."
-                className="h-auto w-[150px] object-contain max-[700px]:w-[120px]"
-              />
-            </a>
+            <Link
+  href="/"
+  aria-label="NeusomaHealing Practice home"
+  className="inline-flex items-center"
+>
+  <img
+    src="/no_bg_neusomalogo_1.png"
+    alt="NeusomaHealing Practice — Heal. Regulate. Transform."
+    className="h-auto w-[150px] object-contain max-[700px]:w-[120px]"
+  />
+</Link>
 
             <p className="mt-7 max-w-[350px] text-[14px] leading-[1.9] text-[#9eb1aa]">
               A nervous-system informed approach to healing, regulation and
@@ -64,14 +65,14 @@ export function SiteFooter() {
                 ["Coaching", "/coaching"],
                 ["Videos", "/videos"],
               ].map(([label, href]) => (
-                <a
+                <Link
                   key={href}
                   href={href}
                   className="group flex items-center text-[12px] text-[#9eb1aa] transition-colors duration-300 hover:text-white"
                 >
                   <span className="mr-2 h-px w-0 bg-[#b27a39] transition-all duration-300 group-hover:w-3" />
                   {label}
-                </a>
+                </Link>
               ))}
             </nav>
           </div>
@@ -90,14 +91,14 @@ export function SiteFooter() {
                 ["Book a Session", "/book-session"],
                 ["Contact", "/contact"],
               ].map(([label, href]) => (
-                <a
+                <Link
                   key={href}
                   href={href}
                   className="group flex items-center text-[12px] text-[#9eb1aa] transition-colors duration-300 hover:text-white"
                 >
                   <span className="mr-2 h-px w-0 bg-[#b27a39] transition-all duration-300 group-hover:w-3" />
                   {label}
-                </a>
+                </Link>
               ))}
             </nav>
           </div>
@@ -148,30 +149,30 @@ export function SiteFooter() {
           </span>
 
           <div className="flex items-center gap-5 max-[700px]:gap-4">
-            <a
+            <Link
               href="/privacy"
               className="transition-colors hover:text-[#b27a39]"
             >
               Privacy
-            </a>
+            </Link>
 
             <span className="h-3 w-px bg-[#49635d]" />
 
-            <a
+            <Link
               href="/terms"
               className="transition-colors hover:text-[#b27a39]"
             >
               Terms
-            </a>
+            </Link>
 
             <span className="h-3 w-px bg-[#49635d]" />
 
-            <a
+            <Link
               href="/disclaimer"
               className="transition-colors hover:text-[#b27a39]"
             >
               Disclaimer
-            </a>
+            </Link>
           </div>
         </div>
       </div>

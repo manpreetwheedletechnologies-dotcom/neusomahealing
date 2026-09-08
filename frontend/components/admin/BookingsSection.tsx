@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  ExternalLink,
   Eye,
   Mail,
   Phone,
@@ -14,6 +15,7 @@ import {
   Search,
   Settings2,
   UserRound,
+  Video,
   X,
   XCircle,
 } from "lucide-react";
@@ -35,6 +37,17 @@ export type Booking = {
   bookingDate: string;
   timeSlot: string;
   message?: string;
+
+  zoomMeetingId?: string;
+  zoomJoinUrl?: string;
+
+  emailStatus?:
+    | "pending"
+    | "sent"
+    | "failed";
+
+  emailLastError?: string;
+
   status: BookingStatus;
   createdAt?: string;
   updatedAt?: string;
@@ -225,19 +238,46 @@ function time12To24(value: string) {
   )}:${minute}`;
 }
 
-function timeToMinutes(value: string) {
+function timeToMinutes(
+  value?: string,
+) {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
   const match =
-    /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(value.trim());
+    /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(
+      value.trim(),
+    );
 
-  if (!match) return Number.MAX_SAFE_INTEGER;
+  if (!match) {
+    return Number.MAX_SAFE_INTEGER;
+  }
 
-  let hour = Number(match[1]);
-  const minute = Number(match[2]);
+  let hour =
+    Number(match[1]);
 
-  if (hour === 12) hour = 0;
-  if (match[3].toUpperCase() === "PM") hour += 12;
+  const minute =
+    Number(match[2]);
 
-  return hour * 60 + minute;
+  if (hour === 12) {
+    hour = 0;
+  }
+
+  if (
+    match[3].toUpperCase() ===
+    "PM"
+  ) {
+    hour += 12;
+  }
+
+  return (
+    hour * 60 +
+    minute
+  );
 }
 
 function sortTimes(values: string[]) {
@@ -259,6 +299,47 @@ function statusClass(status: BookingStatus) {
   };
 
   return classes[status];
+}
+
+function getSafeZoomUrl(
+  value?: string,
+): string | null {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return null;
+  }
+
+  try {
+    const url =
+      new URL(value.trim());
+
+    if (
+      url.protocol !==
+      "https:"
+    ) {
+      return null;
+    }
+
+    const hostname =
+      url.hostname.toLowerCase();
+
+    const isZoomDomain =
+      hostname ===
+        "zoom.us" ||
+      hostname.endsWith(
+        ".zoom.us",
+      );
+
+    if (!isZoomDomain) {
+      return null;
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 /* =========================================================
@@ -365,6 +446,8 @@ const [slotMessage, setSlotMessage] =
           item.bookingDate,
           item.timeSlot,
           item.message,
+          item.zoomMeetingId,
+item.emailStatus,
           item.status,
         ].some((value) =>
           String(value || "")
@@ -372,17 +455,66 @@ const [slotMessage, setSlotMessage] =
             .includes(query),
         );
       })
-      .sort((a, b) => {
-        const dateCompare =
-          a.bookingDate.localeCompare(b.bookingDate);
+     .sort((a, b) => {
+  /*
+   * Runtime API data may contain
+   * legacy/incomplete booking records.
+   *
+   * Never call localeCompare directly
+   * on a possibly undefined value.
+   */
+  const dateA =
+    typeof a.bookingDate === "string"
+      ? a.bookingDate
+      : "";
 
-        if (dateCompare !== 0) return dateCompare;
+  const dateB =
+    typeof b.bookingDate === "string"
+      ? b.bookingDate
+      : "";
 
-        return (
-          timeToMinutes(a.timeSlot) -
-          timeToMinutes(b.timeSlot)
-        );
-      });
+  /*
+   * Valid booking dates first.
+   * Legacy/incomplete records go last.
+   */
+  if (!dateA && !dateB) {
+    return 0;
+  }
+
+  if (!dateA) {
+    return 1;
+  }
+
+  if (!dateB) {
+    return -1;
+  }
+
+  const dateCompare =
+    dateA.localeCompare(dateB);
+
+  if (dateCompare !== 0) {
+    return dateCompare;
+  }
+
+  /*
+   * Protect timeToMinutes() too,
+   * because it calls .trim().
+   */
+  const timeA =
+    typeof a.timeSlot === "string"
+      ? a.timeSlot
+      : "";
+
+  const timeB =
+    typeof b.timeSlot === "string"
+      ? b.timeSlot
+      : "";
+
+  return (
+    timeToMinutes(timeA) -
+    timeToMinutes(timeB)
+  );
+});
   }, [items, search, statusFilter]);
 
   /* =========================================================
@@ -1112,13 +1244,14 @@ async function removeSlot(
 
             <div className="mt-5 overflow-hidden rounded-[22px] border border-[#dce1dc] bg-white">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1050px] text-left">
+                <table className="w-full min-w-[1180px] text-left">
                   <thead className="bg-[#f5f7f4] text-[10px] uppercase tracking-[.13em] text-[#7b8781]">
                     <tr>
                       <th className="px-5 py-4">Client</th>
                       <th className="px-5 py-4">Session</th>
                       <th className="px-5 py-4">Date</th>
                       <th className="px-5 py-4">Time</th>
+                      <th className="px-5 py-4">Zoom</th>
                       <th className="px-5 py-4">Status</th>
                       <th className="px-5 py-4 text-right">
                         Details
@@ -1167,6 +1300,37 @@ async function removeSlot(
                         <td className="px-5 py-5 text-xs font-semibold text-[#46554f]">
                           {booking.timeSlot}
                         </td>
+
+                        <td className="px-5 py-5">
+  {getSafeZoomUrl(
+    booking.zoomJoinUrl,
+  ) ? (
+    <div className="flex flex-col items-start gap-2">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#cfe5dd] bg-[#edf8f4] px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[.08em] text-[#19705f]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#23947d]" />
+        Ready
+      </span>
+
+      <a
+        href={
+          getSafeZoomUrl(
+            booking.zoomJoinUrl,
+          )!
+        }
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#946a3c] transition hover:text-[#63431f]"
+      >
+        Open meeting
+        <ExternalLink size={11} />
+      </a>
+    </div>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e1e5e2] bg-[#f7f8f7] px-2.5 py-1.5 text-[9px] font-semibold uppercase tracking-[.08em] text-[#8a948f]">
+      Not available
+    </span>
+  )}
+</td>
 
                         <td className="px-5 py-5">
                           <select
@@ -1814,6 +1978,115 @@ async function removeSlot(
                 </p>
               </div>
 
+              <div className="mt-4 overflow-hidden rounded-2xl border border-[#d7e2dd] bg-white">
+  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0ed] px-5 py-4">
+    <div className="flex items-center gap-3">
+      <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#edf6f3] text-[#17665a]">
+        <Video size={17} />
+      </div>
+
+      <div>
+        <p className="text-[9px] font-semibold uppercase tracking-[.15em] text-[#8c9792]">
+          Online Session
+        </p>
+
+        <p className="mt-1 text-sm font-semibold text-[#31433c]">
+          Zoom Meeting
+        </p>
+      </div>
+    </div>
+
+    {getSafeZoomUrl(
+      selectedBooking.zoomJoinUrl,
+    ) ? (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#cde4db] bg-[#edf8f4] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[.08em] text-[#176d5c]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#20977c]" />
+        Scheduled
+      </span>
+    ) : (
+      <span className="rounded-full border border-[#e1e5e2] bg-[#f7f8f7] px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[.08em] text-[#84908a]">
+        Unavailable
+      </span>
+    )}
+  </div>
+
+  <div className="p-5">
+    {selectedBooking.zoomMeetingId && (
+      <div>
+        <p className="text-[9px] font-semibold uppercase tracking-[.14em] text-[#919b96]">
+          Meeting ID
+        </p>
+
+        <p className="mt-1.5 font-mono text-sm font-semibold text-[#354740]">
+          {
+            selectedBooking.zoomMeetingId
+          }
+        </p>
+      </div>
+    )}
+
+    {getSafeZoomUrl(
+      selectedBooking.zoomJoinUrl,
+    ) ? (
+      <>
+        <div className="mt-4">
+          <p className="text-[9px] font-semibold uppercase tracking-[.14em] text-[#919b96]">
+            Meeting Link
+          </p>
+
+          <p className="mt-1.5 break-all text-xs leading-5 text-[#63706a]">
+            {
+              selectedBooking.zoomJoinUrl
+            }
+          </p>
+        </div>
+
+        <a
+          href={
+            getSafeZoomUrl(
+              selectedBooking.zoomJoinUrl,
+            )!
+          }
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0b3b38] px-5 py-3 text-xs font-semibold text-white transition hover:bg-[#124c47]"
+        >
+          <Video size={14} />
+
+          Join Zoom Meeting
+
+          <ExternalLink
+            size={13}
+          />
+        </a>
+      </>
+    ) : selectedBooking.zoomJoinUrl ? (
+      <div className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+        <p className="text-xs font-semibold text-red-700">
+          Invalid Zoom meeting link
+        </p>
+
+        <p className="mt-1 text-[10px] leading-5 text-red-600">
+          A meeting link exists in the
+          booking record but could not be
+          validated safely.
+        </p>
+      </div>
+    ) : (
+      <div className="mt-4 rounded-xl border border-[#e1e5e2] bg-[#f8faf8] px-4 py-3">
+        <p className="text-xs font-semibold text-[#68746e]">
+          Zoom meeting is not available
+        </p>
+
+        <p className="mt-1 text-[10px] leading-5 text-[#8b9590]">
+          This may be an older booking
+          created before Zoom integration.
+        </p>
+      </div>
+    )}
+  </div>
+</div>
+
               <div className="mt-4 rounded-2xl border border-[#dde2de] bg-white p-5">
                 <p className="text-[9px] uppercase tracking-[.15em] text-[#8c9792]">
                   Client Message
@@ -1824,6 +2097,85 @@ async function removeSlot(
                     "No additional message provided."}
                 </p>
               </div>
+
+
+              <div className="mt-4 rounded-2xl border border-[#dde2de] bg-white p-5">
+  <div className="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <p className="text-[9px] font-semibold uppercase tracking-[.15em] text-[#8c9792]">
+        Confirmation Email
+      </p>
+
+      <p className="mt-2 text-sm font-semibold text-[#34463f]">
+        Email delivery
+      </p>
+    </div>
+
+    {selectedBooking.emailStatus ===
+    "sent" ? (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#cde5db] bg-[#eef8f4] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[.08em] text-[#1a735f]">
+        <CheckCircle2 size={11} />
+        Sent
+      </span>
+    ) : selectedBooking.emailStatus ===
+      "failed" ? (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[.08em] text-red-600">
+        <XCircle size={11} />
+        Failed
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#eadfcf] bg-[#fff8ed] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[.08em] text-[#996b35]">
+        <Clock3 size={11} />
+        Pending
+      </span>
+    )}
+  </div>
+
+  {selectedBooking.emailStatus ===
+    "sent" && (
+    <p className="mt-3 text-xs leading-5 text-[#718079]">
+      Booking confirmation and Zoom
+      meeting details were sent to{" "}
+      <strong className="text-[#40534b]">
+        {selectedBooking.email}
+      </strong>
+      .
+    </p>
+  )}
+
+  {selectedBooking.emailStatus ===
+    "failed" && (
+    <div className="mt-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+      <p className="text-xs font-semibold text-red-700">
+        Confirmation email could not be
+        delivered.
+      </p>
+
+      <p className="mt-1 text-[10px] leading-5 text-red-600">
+        The booking and Zoom meeting are
+        still valid. Contact the client
+        manually if required.
+      </p>
+
+      {selectedBooking.emailLastError && (
+        <p className="mt-2 break-words text-[10px] leading-5 text-red-500">
+          {
+            selectedBooking.emailLastError
+          }
+        </p>
+      )}
+    </div>
+  )}
+
+  {!selectedBooking.emailStatus && (
+    <p className="mt-3 text-xs leading-5 text-[#818c87]">
+      Email delivery status is not
+      available for this booking.
+    </p>
+  )}
+</div>
+
+
 
               <div className="mt-4 grid grid-cols-2 gap-4 max-[560px]:grid-cols-1">
                 <div className="rounded-2xl border border-[#dde2de] bg-white p-4">
@@ -1867,6 +2219,8 @@ async function removeSlot(
                   </select>
                 </div>
               </div>
+
+
 
               <div className="mt-6 flex flex-wrap justify-end gap-3">
                 {selectedBooking.phone && (

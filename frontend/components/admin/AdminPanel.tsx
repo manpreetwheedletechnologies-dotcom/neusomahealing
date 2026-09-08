@@ -781,6 +781,7 @@ export function AdminPanel() {
       ) => {
         setLoading(true);
         setError("");
+        setItems([]);
 
         try {
           /* =========================
@@ -966,16 +967,9 @@ export function AdminPanel() {
            * not displayed.
            */
 
-          if (
-            target ===
-              "enquiries" ||
-            target ===
-              "bookings" ||
-            target ===
-              "subscribers"
-          ) {
+         
             setItems([]);
-          }
+          
         } finally {
           setLoading(
             false,

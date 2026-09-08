@@ -124,410 +124,863 @@ type GoldenParticleConvergenceProps = {
 function GoldenParticleConvergence({
   onComplete,
 }: GoldenParticleConvergenceProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef =
+    useRef<HTMLCanvasElement | null>(
+      null,
+    );
+
+  const [
+    isFinishing,
+    setIsFinishing,
+  ] = useState(false);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas =
+      canvasRef.current;
 
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx =
+      canvas.getContext("2d", {
+        alpha: true,
+      });
 
     if (!ctx) return;
 
     let animationFrame = 0;
-    let startTime = performance.now();
 
-    const PARTICLE_DURATION = 1850;
+    let completionTimer:
+      | number
+      | undefined;
+
+    let hasCompleted = false;
+
+   /*
+ * First particles become visible
+ * across the complete screen.
+ *
+ * After that the existing vortex
+ * suction starts.
+ */
+const INTRO_REVEAL_DURATION =
+  320;
+
+const VORTEX_DURATION =
+  2430;
+
+const TOTAL_DURATION =
+  INTRO_REVEAL_DURATION +
+  VORTEX_DURATION;
+
+const TWO_PI =
+  Math.PI * 2;
 
     type Particle = {
-      x: number;
-      y: number;
-      startX: number;
-      startY: number;
+      startRadius: number;
+
+      startAngle: number;
+
+      turns: number;
+
       size: number;
+
       alpha: number;
+
       delay: number;
-      curve: number;
-      glow: number;
-      speed: number;
+
+      depth: number;
+
+      glow: boolean;
+
+      phase: number;
     };
 
-    let particles: Particle[] = [];
+    let particles:
+      Particle[] = [];
+
+    let viewportWidth = 0;
+    let viewportHeight = 0;
+
+    /* =========================================
+       PARTICLE CREATION
+    ========================================= */
+
+  function createParticles(
+  width: number,
+  height: number,
+) {
+  const isMobile =
+    width < 768;
+
+  const logicalCores =
+    navigator.hardwareConcurrency ||
+    8;
+
+  /*
+   * Thousands of particles.
+   *
+   * Desktop:
+   * 2700 - 3800
+   *
+   * Mobile:
+   * 1500 - 2100
+   *
+   * fillRect rendering ki wajah se
+   * performance manageable rahegi.
+   */
+  let particleCount: number;
+
+  if (isMobile) {
+    particleCount =
+      logicalCores <= 4
+        ? 1500
+        : 2100;
+  } else {
+    particleCount =
+      logicalCores <= 4
+        ? 2700
+        : 3800;
+  }
+
+  /*
+   * IMPORTANT:
+   *
+   * Random radial distribution ki jagah
+   * screen ko invisible grid me divide
+   * kar rahe hain.
+   *
+   * Isse particles poori screen me
+   * evenly visible honge.
+   *
+   * Koi large empty area nahi rahega.
+   */
+  const aspectRatio =
+    width / height;
+
+  const columns =
+    Math.ceil(
+      Math.sqrt(
+        particleCount *
+          aspectRatio,
+      ),
+    );
+
+  const rows =
+    Math.ceil(
+      particleCount /
+        columns,
+    );
+
+  particles =
+    Array.from(
+      {
+        length:
+          particleCount,
+      },
+
+      (_, index) => {
+        const column =
+          index %
+          columns;
+
+        const row =
+          Math.floor(
+            index /
+              columns,
+          );
+
+        /*
+         * Each particle gets its own
+         * screen cell with random jitter.
+         *
+         * Result:
+         *
+         * evenly distributed particles
+         * without looking like a grid.
+         */
+        const cellWidth =
+          width /
+          columns;
+
+        const cellHeight =
+          height /
+          rows;
+
+        const startX =
+          column *
+            cellWidth +
+          Math.random() *
+            cellWidth;
+
+        const startY =
+          row *
+            cellHeight +
+          Math.random() *
+            cellHeight;
+
+        const centerX =
+          width / 2;
+
+        const centerY =
+          height / 2;
+
+        const dx =
+          startX -
+          centerX;
+
+        const dy =
+          startY -
+          centerY;
+
+        const startRadius =
+          Math.sqrt(
+            dx * dx +
+              dy * dy,
+          );
+
+        const startAngle =
+          Math.atan2(
+            dy,
+            dx,
+          );
+
+        return {
+          startRadius,
+
+          startAngle,
+
+          /*
+           * Same black-hole circular
+           * motion jo abhi tumhe
+           * correct lag raha hai.
+           */
+          turns:
+            1.7 +
+            Math.random() *
+              1.35,
+
+          /*
+           * Thoda more visible,
+           * but still premium.
+           */
+         size:
+  0.85 +
+  Math.random() *
+    1.4,
+
+alpha:
+  0.68 +
+  Math.random() *
+    0.3,
+
+          /*
+           * Very small stagger.
+           *
+           * Long delays nahi rakhenge
+           * warna screen uneven lagegi.
+           */
+          delay:
+            Math.random() *
+              110,
+
+          depth:
+            0.78 +
+            Math.random() *
+              0.42,
+
+          /*
+           * More glowing particles.
+           *
+           * Pehle around every 11th tha.
+           * Ab around every 8th.
+           */
+         glow:
+  index % 6 ===
+  0,
+
+          phase:
+            Math.random() *
+            TWO_PI,
+        };
+      },
+    );
+}
+
+    /* =========================================
+       RESIZE
+    ========================================= */
 
     function resize() {
-      const dpr = Math.min(
-        window.devicePixelRatio || 1,
-        1.75,
-      );
+      viewportWidth =
+        window.innerWidth;
 
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      createParticles(width, height);
-    }
-
-    function createParticles(
-      width: number,
-      height: number,
-    ) {
-      const isMobile = width < 768;
+      viewportHeight =
+        window.innerHeight;
 
       /*
-       * Canvas handles this much better than
-       * thousands of DOM nodes.
+       * High DPR makes thousands of
+       * particles unnecessarily expensive.
+       *
+       * 1.5 still looks crisp while
+       * keeping animation smooth.
        */
-      const particleCount = isMobile ? 900 : 1800;
+      const dpr =
+        Math.min(
+          window.devicePixelRatio ||
+            1,
+          1.5,
+        );
 
-      particles = Array.from(
-        { length: particleCount },
-        () => {
-          /*
-           * Spawn particles all across viewport,
-           * but favour screen edges so movement
-           * toward center feels dramatic.
-           */
+      canvas.width =
+        Math.round(
+          viewportWidth * dpr,
+        );
 
-          const edgeBias = Math.random();
+      canvas.height =
+        Math.round(
+          viewportHeight * dpr,
+        );
 
-          let x: number;
-          let y: number;
+      canvas.style.width =
+        `${viewportWidth}px`;
 
-          if (edgeBias < 0.58) {
-            const edge = Math.floor(Math.random() * 4);
+      canvas.style.height =
+        `${viewportHeight}px`;
 
-            if (edge === 0) {
-              x = Math.random() * width;
-              y = Math.random() * height * 0.18;
-            } else if (edge === 1) {
-              x = width - Math.random() * width * 0.12;
-              y = Math.random() * height;
-            } else if (edge === 2) {
-              x = Math.random() * width;
-              y = height - Math.random() * height * 0.18;
-            } else {
-              x = Math.random() * width * 0.12;
-              y = Math.random() * height;
-            }
-          } else {
-            x = Math.random() * width;
-            y = Math.random() * height;
-          }
+      ctx.setTransform(
+        dpr,
+        0,
+        0,
+        dpr,
+        0,
+        0,
+      );
 
-          return {
-            x,
-            y,
-
-            startX: x,
-            startY: y,
-
-            size: 0.45 + Math.random() * 1.6,
-
-            alpha: 0.22 + Math.random() * 0.78,
-
-            delay: Math.random() * 380,
-
-            /*
-             * Positive / negative gives clockwise
-             * and counter-clockwise curved movement.
-             */
-            curve:
-              (Math.random() - 0.5) *
-              (80 + Math.random() * 170),
-
-            glow: Math.random(),
-
-            speed:
-              0.85 + Math.random() * 0.3,
-          };
-        },
+      createParticles(
+        viewportWidth,
+        viewportHeight,
       );
     }
 
-  function convergenceEase(value: number) {
-  const t = Math.min(
-    Math.max(value, 0),
+    /* =========================================
+       SMOOTH PROGRESS
+    ========================================= */
+
+    function smoothStep(
+      value: number,
+    ) {
+      const t =
+        Math.min(
+          Math.max(
+            value,
+            0,
+          ),
+          1,
+        );
+
+      return (
+        t *
+        t *
+        (
+          3 -
+          2 * t
+        )
+      );
+    }
+
+    /* =========================================
+       DRAW BLACK-HOLE CORE
+    ========================================= */
+
+    function drawCore(
+      centerX: number,
+      centerY: number,
+      progress: number,
+    ) {
+      /*
+       * Small premium golden accretion glow.
+       *
+       * Huge flash intentionally avoided.
+       */
+      const visibility =
+        Math.min(
+          Math.max(
+            (
+              progress -
+              0.25
+            ) /
+              0.75,
+            0,
+          ),
+          1,
+        );
+
+      if (
+        visibility <= 0
+      ) {
+        return;
+      }
+
+      const radius =
+        22 +
+        visibility *
+          42;
+
+      const gradient =
+        ctx.createRadialGradient(
+          centerX,
+          centerY,
+          0,
+
+          centerX,
+          centerY,
+          radius,
+        );
+
+      gradient.addColorStop(
+        0,
+        `rgba(
+          255,
+          244,
+          212,
+          ${
+            0.16 *
+            visibility
+          }
+        )`,
+      );
+
+      gradient.addColorStop(
+        0.18,
+        `rgba(
+          242,
+          188,
+          91,
+          ${
+            0.11 *
+            visibility
+          }
+        )`,
+      );
+
+      gradient.addColorStop(
+        0.55,
+        `rgba(
+          221,
+          150,
+          48,
+          ${
+            0.035 *
+            visibility
+          }
+        )`,
+      );
+
+      gradient.addColorStop(
+        1,
+        "rgba(0,0,0,0)",
+      );
+
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle =
+        gradient;
+
+      ctx.beginPath();
+
+      ctx.arc(
+        centerX,
+        centerY,
+        radius,
+        0,
+        TWO_PI,
+      );
+
+      ctx.fill();
+
+      /*
+       * Tiny dark singularity.
+       */
+      const coreSize =
+        4 +
+        visibility * 7;
+
+      ctx.fillStyle =
+        `rgba(
+          0,
+          0,
+          8,
+          ${
+            0.75 *
+            visibility
+          }
+        )`;
+
+      ctx.beginPath();
+
+      ctx.arc(
+        centerX,
+        centerY,
+        coreSize,
+        0,
+        TWO_PI,
+      );
+
+      ctx.fill();
+    }
+
+    /* =========================================
+       RENDER
+    ========================================= */
+
+    const startTime =
+      performance.now();
+
+    function render(
+      now: number,
+    ) {
+      const elapsed =
+        now - startTime;
+
+      const width =
+        viewportWidth;
+
+      const height =
+        viewportHeight;
+
+      const centerX =
+        width / 2;
+
+      const centerY =
+        height / 2;
+
+      ctx.clearRect(
+        0,
+        0,
+        width,
+        height,
+      );
+
+     /*
+ * First 320ms:
+ *
+ * particles full screen par
+ * softly emerge honge.
+ */
+const revealProgress =
+  Math.min(
+    elapsed /
+      INTRO_REVEAL_DURATION,
     1,
   );
 
-  return (
-    t < 0.45
-      ? 1.8 * t * t
-      : 1 -
-        Math.pow(
-          1 - t,
-          3.2,
-        )
+/*
+ * Vortex movement starts only
+ * after full-screen reveal.
+ */
+const vortexElapsed =
+  Math.max(
+    elapsed -
+      INTRO_REVEAL_DURATION,
+    0,
   );
-}
 
-    function render(now: number) {
-      const elapsed = now - startTime;
+const globalProgress =
+  Math.min(
+    vortexElapsed /
+      VORTEX_DURATION,
+    1,
+  );
 
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-
-      const centerX = width / 2;
-      const centerY = height / 2;
-
-      ctx.clearRect(0, 0, width, height);
+drawCore(
+  centerX,
+  centerY,
+  globalProgress,
+);
 
       /*
-       * Subtle central atmospheric glow.
+       * Additive blending makes overlapping
+       * golden particles naturally brighter
+       * without expensive shadowBlur.
        */
+      ctx.save();
 
-      const progress = Math.min(
-        elapsed / PARTICLE_DURATION,
+      ctx.globalCompositeOperation =
+        "lighter";
+
+      for (
+        const particle
+        of particles
+      ) {
+      /*
+ * Movement starts after
+ * INTRO_REVEAL_DURATION.
+ *
+ * Before that particles still
+ * render at their starting
+ * positions.
+ */
+const localElapsed =
+  vortexElapsed -
+  particle.delay;
+
+const availableTime =
+  Math.max(
+    VORTEX_DURATION -
+      particle.delay,
+    1,
+  );
+
+const rawProgress =
+  localElapsed <= 0
+    ? 0
+    : Math.min(
+        localElapsed /
+          availableTime,
         1,
       );
-
-      if (progress > 0.48) {
-        const glowProgress =
-          (progress - 0.48) / 0.52;
-
-        const coreRadius =
-          12 + glowProgress * 105;
-
-        const gradient =
-          ctx.createRadialGradient(
-            centerX,
-            centerY,
-            0,
-            centerX,
-            centerY,
-            coreRadius,
+        /*
+         * Smooth radial collapse.
+         */
+        const pull =
+          smoothStep(
+            rawProgress,
           );
 
-        gradient.addColorStop(
-          0,
-          `rgba(255, 237, 191, ${
-            0.32 * glowProgress
-          })`,
-        );
-
-        gradient.addColorStop(
-          0.18,
-          `rgba(238, 183, 88, ${
-            0.2 * glowProgress
-          })`,
-        );
-
-        gradient.addColorStop(
-          1,
-          "rgba(219, 149, 47, 0)",
-        );
-
-        ctx.fillStyle = gradient;
-
-        ctx.beginPath();
-
-        ctx.arc(
-          centerX,
-          centerY,
-          coreRadius,
-          0,
-          Math.PI * 2,
-        );
-
-        ctx.fill();
-      }
-
-      for (const particle of particles) {
-        const localElapsed =
-          elapsed - particle.delay;
-
-        if (localElapsed <= 0) continue;
-
-        const localDuration =
-          (PARTICLE_DURATION -
-            particle.delay) /
-          particle.speed;
-
-        const rawProgress = Math.min(
-          localElapsed / localDuration,
-          1,
-        );
+        /*
+         * Radius continuously gets
+         * smaller.
+         *
+         * The exponent makes the final
+         * suction faster but remains
+         * mathematically smooth.
+         */
+        const radius =
+          particle.startRadius *
+          Math.pow(
+            1 - pull,
+            1.12,
+          );
 
         /*
-         * Starts controlled, then accelerates
-         * hard toward the center.
+         * Rotation speeds up slightly as
+         * particle gets closer to center.
+         *
+         * Gives actual black-hole spiral
+         * instead of a bent straight line.
          */
+        const rotationProgress =
+          rawProgress +
+          rawProgress *
+            rawProgress *
+            0.34;
 
-        const pull =
-  convergenceEase(
-    rawProgress,
-  );
-        const dx =
-          centerX - particle.startX;
-
-        const dy =
-          centerY - particle.startY;
-
-        const distance =
-          Math.sqrt(dx * dx + dy * dy) || 1;
-
-        const perpendicularX =
-          -dy / distance;
-
-        const perpendicularY =
-          dx / distance;
+        const angle =
+          particle.startAngle +
+          particle.turns *
+            TWO_PI *
+            rotationProgress;
 
         /*
-         * Curvature disappears while particle
-         * reaches the central singularity.
+         * Tiny organic vibration only.
+         * It disappears near singularity.
          */
+        const microWave =
+          Math.sin(
+            rawProgress *
+              8 +
+              particle.phase,
+          ) *
+          1.8 *
+          (
+            1 -
+            pull
+          );
 
-        const curveStrength =
-          Math.sin(rawProgress * Math.PI) *
-          particle.curve;
+        const currentRadius =
+          Math.max(
+            radius +
+              microWave,
+            0,
+          );
 
-        particle.x =
-          particle.startX +
-          dx * pull +
-          perpendicularX *
-            curveStrength *
-            (1 - pull * 0.65);
+        const x =
+          centerX +
+          Math.cos(
+            angle,
+          ) *
+            currentRadius;
 
-        particle.y =
-          particle.startY +
-          dy * pull +
-          perpendicularY *
-            curveStrength *
-            (1 - pull * 0.65);
+        const y =
+          centerY +
+          Math.sin(
+            angle,
+          ) *
+            currentRadius;
 
         /*
-         * Fade only when practically absorbed.
+         * Fade only when particle has
+         * practically entered singularity.
          */
-
-        const endFade =
-          rawProgress > 0.9
-            ? 1 -
-              (rawProgress - 0.9) / 0.1
-            : 1;
-
-        const arrivalBoost =
-          rawProgress > 0.65
-            ? 1.2
-            : 1;
-
-        const alpha =
-          particle.alpha *
-          endFade *
-          arrivalBoost;
-
-        if (alpha <= 0.01) continue;
-
-        /*
-         * Bright core.
-         */
-
-        ctx.beginPath();
-
-        ctx.fillStyle =
-          particle.glow > 0.82
-            ? `rgba(255, 239, 198, ${alpha})`
-            : `rgba(239, 186, 91, ${alpha})`;
-
-        ctx.shadowBlur =
-          particle.glow > 0.7
-            ? 8
-            : 3;
-
-        ctx.shadowColor =
-          particle.glow > 0.82
-            ? "rgba(255, 218, 147, .85)"
-            : "rgba(226, 158, 54, .55)";
-
-        const size =
-          particle.size *
-          (0.8 + pull * 0.55);
-
-        ctx.arc(
-          particle.x,
-          particle.y,
-          size,
-          0,
-          Math.PI * 2,
-        );
-
-        ctx.fill();
-
-        /*
-         * Tiny motion streak as particle speed rises.
-         */
+        let endFade = 1;
 
         if (
-          rawProgress > 0.55 &&
-          rawProgress < 0.94 &&
-          particle.glow > 0.48
+          rawProgress >
+          0.94
         ) {
-          const previousPull =
-            convergenceEase(
-              Math.max(
-                rawProgress - 0.018,
-                0,
-              ),
+          endFade =
+            Math.max(
+              0,
+              1 -
+                (
+                  rawProgress -
+                  0.94
+                ) /
+                  0.06,
             );
+        }
 
-          const previousX =
-            particle.startX +
-            dx * previousPull +
-            perpendicularX *
-              curveStrength *
-              (1 - previousPull * 0.65);
+        /*
+         * Slight brightness boost while
+         * accelerating inward.
+         */
+        const inwardBoost =
+          0.75 +
+          pull * 0.5;
 
-          const previousY =
-            particle.startY +
-            dy * previousPull +
-            perpendicularY *
-              curveStrength *
-              (1 - previousPull * 0.65);
+       const alpha =
+  Math.min(
+    particle.alpha *
+      inwardBoost *
+      endFade *
+      revealProgress,
+    1,
+  );
 
-          ctx.beginPath();
+        if (
+          alpha <=
+          0.01
+        ) {
+          continue;
+        }
 
-          ctx.moveTo(
-            previousX,
-            previousY,
+        /*
+         * Particle becomes slightly smaller
+         * near the center, making absorption
+         * clean rather than forming a blob.
+         */
+        const size =
+          Math.max(
+            0.35,
+            particle.size *
+              particle.depth *
+              (
+                1 -
+                pull * 0.42
+              ),
           );
 
-          ctx.lineTo(
-            particle.x,
-            particle.y,
+        /*
+         * Main golden particle.
+         *
+         * fillRect is dramatically cheaper
+         * than thousands of arc + shadowBlur
+         * operations and at this tiny size
+         * still visually reads as a dot.
+         */
+        ctx.globalAlpha =
+          alpha;
+
+       ctx.fillStyle =
+  particle.glow
+    ? "#fff1c7"
+    : "#f6c86f";
+
+        ctx.fillRect(
+          x - size / 2,
+          y - size / 2,
+          size,
+          size,
+        );
+
+        /*
+         * Only ~1/11 particles receive
+         * an extra soft glow.
+         *
+         * No shadowBlur.
+         */
+        if (
+          particle.glow
+        ) {
+          const glowSize =
+            size * 3.4;
+
+        ctx.globalAlpha =
+  alpha * 0.28;
+
+ctx.fillStyle =
+  "#ffda88";
+          ctx.fillRect(
+            x -
+              glowSize / 2,
+            y -
+              glowSize / 2,
+            glowSize,
+            glowSize,
           );
-
-          ctx.strokeStyle = `rgba(235, 176, 73, ${
-            alpha * 0.28
-          })`;
-
-          ctx.lineWidth = 0.6;
-
-          ctx.stroke();
         }
       }
 
-      ctx.shadowBlur = 0;
+      ctx.restore();
 
-      if (elapsed < PARTICLE_DURATION + 100) {
-        animationFrame =
-          requestAnimationFrame(render);
+      ctx.globalAlpha = 1;
+
+     if (
+  elapsed <
+  TOTAL_DURATION
+) {
+  animationFrame =
+    requestAnimationFrame(
+      render,
+    );
+
+  return;
+}
+
+      /*
+       * IMPORTANT:
+       *
+       * Canvas itself controls completion.
+       * No separate Framer timer.
+       *
+       * So there is no frozen gap between
+       * last particle and image reveal.
+       */
+      if (
+        !hasCompleted
+      ) {
+        hasCompleted = true;
+
+        setIsFinishing(
+          true,
+        );
+
+        completionTimer =
+          window.setTimeout(
+            () => {
+              onComplete();
+            },
+            180,
+          );
       }
     }
 
     resize();
 
-    startTime =
-      performance.now();
-
     animationFrame =
-      requestAnimationFrame(render);
+      requestAnimationFrame(
+        render,
+      );
 
     window.addEventListener(
       "resize",
@@ -539,6 +992,14 @@ function GoldenParticleConvergence({
         animationFrame,
       );
 
+      if (
+        completionTimer
+      ) {
+        window.clearTimeout(
+          completionTimer,
+        );
+      }
+
       window.removeEventListener(
         "resize",
         resize,
@@ -548,29 +1009,22 @@ function GoldenParticleConvergence({
 
   return (
     <motion.div
-      className={styles.particleConvergence}
+      className={
+        styles.particleConvergence
+      }
       initial={{
         opacity: 1,
       }}
       animate={{
-        opacity: [
-          1,
-          1,
-          1,
-          0,
-        ],
+        opacity:
+          isFinishing
+            ? 0
+            : 1,
       }}
       transition={{
-        duration: 2.35,
-        times: [
-          0,
-          0.78,
-          0.94,
-          1,
-        ],
+        duration: 0.18,
         ease: "easeOut",
       }}
-      onAnimationComplete={onComplete}
       aria-hidden="true"
     >
       <canvas
@@ -578,68 +1032,6 @@ function GoldenParticleConvergence({
         className={
           styles.particleConvergenceCanvas
         }
-      />
-
-      {/* final central ignition */}
-
-      <motion.span
-        className={
-          styles.convergenceCore
-        }
-        initial={{
-          opacity: 0,
-          scale: 0.1,
-        }}
-        animate={{
-          opacity: [
-            0,
-            0,
-            0.15,
-            1,
-            0,
-          ],
-
-          scale: [
-            0.1,
-            0.1,
-            0.5,
-            1,
-            2.8,
-          ],
-        }}
-        transition={{
-          duration: 0.82,
-          delay: 1.25,
-          ease: "easeOut",
-        }}
-      />
-
-      <motion.span
-        className={
-          styles.convergencePulse
-        }
-        initial={{
-          opacity: 0,
-          scale: 0.1,
-        }}
-        animate={{
-          opacity: [
-            0,
-            0.6,
-            0,
-          ],
-
-          scale: [
-            0.1,
-            0.8,
-            2.2,
-          ],
-        }}
-        transition={{
-          duration: 0.6,
-          delay: 1.58,
-          ease: "easeOut",
-        }}
       />
     </motion.div>
   );
@@ -816,12 +1208,25 @@ export function Preloader({
               AMBIENT STARS
           ================================================= */}
 
-          <div
-            className={
-              styles.particleField
-            }
-            aria-hidden="true"
-          >
+         <motion.div
+  className={
+    styles.particleField
+  }
+  aria-hidden="true"
+  initial={{
+    opacity: 0,
+  }}
+  animate={{
+    opacity:
+      particleIntroDone
+        ? 1
+        : 0,
+  }}
+  transition={{
+    duration: 0.65,
+    ease: "easeOut",
+  }}
+>
             {AMBIENT_PARTICLES.map(
               (
                 particle,
@@ -882,7 +1287,7 @@ export function Preloader({
                 />
               ),
             )}
-          </div>
+          </motion.div>
 
          {/* ================================================
     GOLDEN PARTICLE CONVERGENCE
@@ -997,64 +1402,21 @@ export function Preloader({
           >
             {/* IMAGE MATERIALIZATION */}
 
-            <motion.div
+           <motion.div
   className={
     styles.imageReveal
   }
   initial={{
     opacity: 0,
-
-    scale: 0.72,
-
-    filter:
-      "blur(24px) brightness(1.7)",
-
-    clipPath:
-      "circle(0% at 50% 46%)",
   }}
-  animate={
-    particleIntroDone
-      ? {
-          opacity: 1,
-
-          scale: [
-            0.72,
-            0.94,
-            1.025,
-            1,
-          ],
-
-          filter: [
-            "blur(24px) brightness(1.7)",
-            "blur(12px) brightness(1.38)",
-            "blur(2px) brightness(1.08)",
-            "blur(0px) brightness(1)",
-          ],
-
-          clipPath: [
-            "circle(0% at 50% 46%)",
-            "circle(18% at 50% 46%)",
-            "circle(50% at 50% 46%)",
-            "circle(76% at 50% 46%)",
-          ],
-        }
-      : {
-          opacity: 0,
-
-          scale: 0.72,
-
-          filter:
-            "blur(24px) brightness(1.7)",
-
-          clipPath:
-            "circle(0% at 50% 46%)",
-        }
-  }
+  animate={{
+    opacity:
+      particleIntroDone
+        ? 1
+        : 0,
+  }}
   transition={{
-    duration: 1.2,
-
-    delay: 0.04,
-
+    duration: 0.48,
     ease: [
       0.16,
       1,
@@ -1062,7 +1424,8 @@ export function Preloader({
       1,
     ],
   }}
->              <motion.div
+>
+                  <motion.div
                 className={
                   styles.imageStage
                 }

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { buttonGold, buttonOutline } from "@/lib/home-styles";
+import Link from "next/link";
 
 export function FinalCta() {
   return (
@@ -41,22 +42,22 @@ export function FinalCta() {
         </div>
 
         {/* BUTTONS */}
-        <div className="relative z-[2] flex flex-col gap-[8px] px-[24px] max-[900px]:items-start max-[700px]:pb-[35px]">
-          <a
-            href="/book-session"
-            className="flex h-[38px] w-[178px] items-center justify-center rounded-full bg-[#fff4df] px-[18px] text-[10px] font-semibold text-[#654a2d] transition hover:bg-white"
-          >
-            Begin Your Journey
-            <span className="ml-[8px]">↗</span>
-          </a>
+       <div className="relative z-[9999] flex flex-col gap-[8px] px-[24px] max-[900px]:items-start max-[700px]:pb-[35px]">
+  <Link
+    href="/contact"
+    className="relative z-[9999] flex h-[38px] w-[178px] cursor-pointer items-center justify-center rounded-full bg-[#fff4df] px-[18px] text-[10px] font-semibold text-[#654a2d] transition hover:bg-white"
+  >
+    Begin Your Journey
+    <span className="ml-[8px]">↗</span>
+  </Link>
 
-          <a
-            href="/book-session"
-            className="flex h-[38px] w-[178px] items-center justify-center rounded-full border border-[#c9a873] bg-transparent px-[18px] text-[10px] font-semibold text-[#f7ead6] transition hover:bg-[#c9a873] hover:text-[#18302d]"
-          >
-            Book a Session
-          </a>
-        </div>
+  <Link
+    href="/book-session"
+    className="relative z-[9999] flex h-[38px] w-[178px] cursor-pointer items-center justify-center rounded-full border border-[#c9a873] bg-transparent px-[18px] text-[10px] font-semibold text-[#f7ead6] transition hover:bg-[#c9a873] hover:text-[#18302d]"
+  >
+    Book a Session
+  </Link>
+</div>
       </div>
 
       {/* LOTUS DECORATION */}

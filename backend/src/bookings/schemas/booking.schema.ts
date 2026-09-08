@@ -55,6 +55,47 @@ slotId?: Types.ObjectId;
 })
 bookingMode?: 'individual' | 'webinar';
 
+  /*
+   * Zoom meeting snapshot for this booking.
+   *
+   * Admin dashboard can display the meeting
+   * directly from the booking record.
+   */
+  @Prop({
+    trim: true,
+    maxlength: 100,
+  })
+  zoomMeetingId?: string;
+
+  @Prop({
+    trim: true,
+    maxlength: 1000,
+  })
+  zoomJoinUrl?: string;
+
+  /*
+   * Free Zoom flow:
+   * backend sends the confirmation email.
+   */
+  @Prop({
+    type: String,
+    enum: [
+      'pending',
+      'sent',
+      'failed',
+    ],
+  })
+  emailStatus?:
+    | 'pending'
+    | 'sent'
+    | 'failed';
+
+  @Prop({
+    trim: true,
+    maxlength: 1000,
+  })
+  emailLastError?: string;
+
 /*
  * Prevent same email from registering for
  * the same active slot more than once.

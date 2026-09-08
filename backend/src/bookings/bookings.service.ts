@@ -3,9 +3,12 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 
 import { InjectModel } from '@nestjs/mongoose';
+import { ZoomService } from './zoom.service';
+import { BookingMailService } from './booking-mail.service';
 
 import {
   Model,
@@ -60,10 +63,15 @@ export class BookingsService {
     private readonly settingsModel:
       Model<BookingSettingsDocument>,
 
-    @InjectModel(BookingSlot.name)
-    private readonly slotModel:
-      Model<BookingSlotDocument>,
-  ) {}
+   @InjectModel(BookingSlot.name)
+private readonly slotModel:
+  Model<BookingSlotDocument>,
+
+private readonly zoomService:
+  ZoomService,
+  private readonly bookingMailService:
+  BookingMailService,
+) {}
 
   /* =======================================================
      PUBLIC CONFIG
@@ -645,85 +653,225 @@ const storedSlots =
       );
     }
 
-    try {
-      const booking =
-        await this.bookingModel.create(
-          {
-            name:
-              dto.name,
+   try {
+  /*
+   * Ensure exactly one Zoom meeting exists
+   * for this BookingSlot.
+   *
+   * Individual:
+   * one slot -> one Zoom meeting
+   *
+   * Webinar:
+   * many bookings -> same Zoom meeting
+   */
+  const zoomMeeting =
+    await this.ensureZoomMeetingForSlot(
+      reservedSlot,
+      activeSession.duration,
+      settings.timezone,
+    );
 
-            email,
+  const booking =
+    await this.bookingModel.create(
+      {
+        name:
+          dto.name,
 
-            phone:
-              dto.phone ||
-              undefined,
+        email,
 
-            /*
-             * Always trust DB slot,
-             * not browser-supplied session data.
-             */
-            sessionType:
-              slot.sessionType,
+        phone:
+          dto.phone ||
+          undefined,
 
-            bookingDate:
-              slot.bookingDate,
+        /*
+         * Always trust DB slot,
+         * not browser-supplied session data.
+         */
+        sessionType:
+          slot.sessionType,
 
-            timeSlot:
-              slot.timeSlot,
+        bookingDate:
+          slot.bookingDate,
 
-            slotId:
-              slot._id,
+        timeSlot:
+          slot.timeSlot,
 
-            bookingMode:
-              slot.bookingMode,
+        slotId:
+          slot._id,
 
-            message:
-              dto.message ||
-              undefined,
+        bookingMode:
+          slot.bookingMode,
 
-            activeRegistrationKey,
+        /*
+         * Snapshot Zoom details on booking.
+         *
+         * Admin dashboard will read these
+         * directly from booking record.
+         */
+        zoomMeetingId:
+          zoomMeeting.meetingId,
 
-            status:
-              'pending',
-          },
-        );
-
-      return {
-        success: true,
+        zoomJoinUrl:
+          zoomMeeting.joinUrl,
+          emailStatus:'pending',
 
         message:
-          slot.bookingMode ===
-          'webinar'
-            ? 'Your webinar registration has been submitted successfully.'
-            : 'Your session request has been submitted successfully. We will contact you to confirm the booking.',
+          dto.message ||
+          undefined,
 
-        data: {
-          id:
-            booking._id.toString(),
+        activeRegistrationKey,
 
-          slotId:
-            slot._id.toString(),
+        status:
+          'pending',
+      },
+    );
 
-          sessionType:
-            booking.sessionType,
 
-          bookingMode:
-            booking.bookingMode,
+    /*
+ * Booking already exists at this point.
+ *
+ * Email failure MUST NOT roll back
+ * the booking or reserved seat.
+ */
+let emailStatus:
+  'sent' | 'failed' =
+  'sent';
 
-          bookingDate:
-            booking.bookingDate,
+try {
+  await this.bookingMailService
+    .sendBookingConfirmation({
+      name:
+        booking.name,
 
-          timeSlot:
-            booking.timeSlot,
+      email:
+        booking.email,
 
-          status:
-            booking.status,
+      sessionType:
+        booking.sessionType,
 
-          remainingSeats:
-            reservedSlot.remainingSeats,
+      bookingDate:
+        booking.bookingDate,
+
+      timeSlot:
+        booking.timeSlot,
+
+      timezone:
+        settings.timezone ||
+        'Asia/Kolkata',
+
+      zoomJoinUrl:
+        zoomMeeting.joinUrl,
+    });
+
+  /*
+   * Do not allow a status persistence
+   * failure to invalidate a real booking.
+   */
+  await this.bookingModel
+    .updateOne(
+      {
+        _id:
+          booking._id,
+      },
+      {
+        $set: {
+          emailStatus:
+            'sent',
         },
-      };
-    } catch (
+
+        $unset: {
+          emailLastError:
+            1,
+        },
+      },
+    )
+    .exec()
+    .catch(
+      () =>
+        undefined,
+    );
+} catch (emailError) {
+  emailStatus =
+    'failed';
+
+  const emailErrorMessage =
+    emailError instanceof Error
+      ? emailError.message
+      : 'Unable to send confirmation email.';
+
+  await this.bookingModel
+    .updateOne(
+      {
+        _id:
+          booking._id,
+      },
+      {
+        $set: {
+          emailStatus:
+            'failed',
+
+          emailLastError:
+            emailErrorMessage.slice(
+              0,
+              1000,
+            ),
+        },
+      },
+    )
+    .exec()
+    .catch(
+      () =>
+        undefined,
+    );
+}
+
+  return {
+    success: true,
+
+    message:
+      slot.bookingMode ===
+      'webinar'
+        ? 'Your webinar registration has been submitted successfully.'
+        : 'Your session has been booked successfully.',
+
+    data: {
+      id:
+        booking._id.toString(),
+
+      slotId:
+        slot._id.toString(),
+
+      sessionType:
+        booking.sessionType,
+
+      bookingMode:
+        booking.bookingMode,
+
+      bookingDate:
+        booking.bookingDate,
+
+      timeSlot:
+        booking.timeSlot,
+
+      status:
+        booking.status,
+
+      /*
+       * Temporary useful response.
+       *
+       * Later email will also contain
+       * this Zoom join URL.
+       */
+      zoomJoinUrl:
+        booking.zoomJoinUrl,
+
+        emailStatus,
+
+      remainingSeats:
+        reservedSlot.remainingSeats,
+    },
+  };
+} catch (
       error: unknown
     ) {
       /*
@@ -2201,6 +2349,327 @@ const storedSlots =
 
     return capacity;
   }
+
+
+
+  /* =======================================================
+   ZOOM MEETING
+======================================================= */
+
+private async ensureZoomMeetingForSlot(
+  slot: BookingSlotDocument,
+  durationText: string,
+  timezone: string,
+): Promise<{
+  meetingId: string;
+  joinUrl: string;
+}> {
+  /*
+   * Meeting already exists.
+   */
+  if (
+    slot.zoomStatus ===
+      'scheduled' &&
+    slot.zoomMeetingId &&
+    slot.zoomJoinUrl
+  ) {
+    return {
+      meetingId:
+        slot.zoomMeetingId,
+
+      joinUrl:
+        slot.zoomJoinUrl,
+    };
+  }
+
+  /*
+   * Only one request is allowed to
+   * become Zoom meeting creator.
+   *
+   * Very important for Webinar because
+   * multiple customers may book the same
+   * slot at nearly the same time.
+   */
+  const claimedSlot =
+    await this.slotModel
+      .findOneAndUpdate(
+        {
+          _id:
+            slot._id,
+
+          $or: [
+            {
+              zoomStatus: {
+                $exists:
+                  false,
+              },
+            },
+            {
+              zoomStatus:
+                'not_created',
+            },
+            {
+              zoomStatus:
+                'failed',
+            },
+          ],
+        },
+        {
+          $set: {
+            zoomStatus:
+              'creating',
+          },
+
+          $unset: {
+            zoomLastError:
+              1,
+          },
+        },
+        {
+          new:
+            true,
+        },
+      )
+      .exec();
+
+  /*
+   * This request owns Zoom creation.
+   */
+  if (claimedSlot) {
+    try {
+      const meeting =
+        await this.zoomService
+          .createMeeting({
+            topic:
+              `Neusoma Healing - ${slot.sessionType}`,
+
+            startTime:
+              this.buildZoomStartTime(
+                slot.bookingDate,
+                slot.timeSlot,
+              ),
+
+            duration:
+              this.parseSessionDuration(
+                durationText,
+              ),
+
+            timezone:
+              timezone ||
+              'Asia/Kolkata',
+          });
+
+      /*
+       * Save meeting at slot level.
+       *
+       * Every booking of this slot
+       * will reuse this Zoom meeting.
+       */
+      await this.slotModel
+        .updateOne(
+          {
+            _id:
+              slot._id,
+          },
+          {
+            $set: {
+              zoomMeetingId:
+                meeting.meetingId,
+
+              zoomJoinUrl:
+                meeting.joinUrl,
+
+              zoomStatus:
+                'scheduled',
+            },
+
+            $unset: {
+              zoomLastError:
+                1,
+            },
+          },
+        )
+        .exec();
+
+      return meeting;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Unable to create Zoom meeting.';
+
+      /*
+       * Do not expose Zoom credentials /
+       * internal response data in DB.
+       */
+      await this.slotModel
+        .updateOne(
+          {
+            _id:
+              slot._id,
+          },
+          {
+            $set: {
+              zoomStatus:
+                'failed',
+
+              zoomLastError:
+                errorMessage.slice(
+                  0,
+                  1000,
+                ),
+            },
+          },
+        )
+        .exec()
+        .catch(() => undefined);
+
+      throw error;
+    }
+  }
+
+  /*
+   * Another booking request is currently
+   * creating the Zoom meeting.
+   *
+   * Wait briefly and reuse its result
+   * instead of creating duplicate meetings.
+   */
+  for (
+    let attempt = 0;
+    attempt < 20;
+    attempt += 1
+  ) {
+    await new Promise<void>(
+      (resolve) =>
+        setTimeout(
+          resolve,
+          250,
+        ),
+    );
+
+    const currentSlot =
+      await this.slotModel
+        .findById(
+          slot._id,
+        )
+        .select(
+          'zoomMeetingId zoomJoinUrl zoomStatus',
+        )
+        .exec();
+
+    if (!currentSlot) {
+      throw new ServiceUnavailableException(
+        'The selected booking slot is no longer available.',
+      );
+    }
+
+    if (
+      currentSlot.zoomStatus ===
+        'scheduled' &&
+      currentSlot.zoomMeetingId &&
+      currentSlot.zoomJoinUrl
+    ) {
+      return {
+        meetingId:
+          currentSlot.zoomMeetingId,
+
+        joinUrl:
+          currentSlot.zoomJoinUrl,
+      };
+    }
+
+    if (
+      currentSlot.zoomStatus ===
+      'failed'
+    ) {
+      throw new ServiceUnavailableException(
+        'Unable to create the Zoom meeting. Please try again.',
+      );
+    }
+  }
+
+  throw new ServiceUnavailableException(
+    'The Zoom meeting is still being prepared. Please try again shortly.',
+  );
+}
+
+/* =======================================================
+   ZOOM START TIME
+======================================================= */
+
+private buildZoomStartTime(
+  bookingDate: string,
+  timeSlot: string,
+): string {
+  const minutes =
+    this.parseTimeSlotToMinutes(
+      timeSlot,
+    );
+
+  if (
+    minutes ===
+    Number.MAX_SAFE_INTEGER
+  ) {
+    throw new ServiceUnavailableException(
+      'The Zoom meeting time is configured incorrectly.',
+    );
+  }
+
+  const hour =
+    Math.floor(
+      minutes / 60,
+    );
+
+  const minute =
+    minutes % 60;
+
+  return `${bookingDate}T${String(
+    hour,
+  ).padStart(
+    2,
+    '0',
+  )}:${String(
+    minute,
+  ).padStart(
+    2,
+    '0',
+  )}:00`;
+}
+
+/* =======================================================
+   SESSION DURATION
+======================================================= */
+
+private parseSessionDuration(
+  value: string,
+): number {
+  const duration =
+    Number.parseInt(
+      String(
+        value ||
+        '',
+      ),
+      10,
+    );
+
+  if (
+    !Number.isInteger(
+      duration,
+    ) ||
+    duration <
+      1 ||
+    duration >
+      1440
+  ) {
+    throw new ServiceUnavailableException(
+      'The session duration is configured incorrectly.',
+    );
+  }
+
+  return duration;
+}
+
 
   /* =======================================================
      DATE VALIDATION

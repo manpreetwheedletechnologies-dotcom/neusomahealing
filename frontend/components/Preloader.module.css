@@ -222,7 +222,12 @@
 
   pointer-events: none;
 
-  will-change: opacity;
+  contain:
+    layout
+    paint;
+
+  will-change:
+    opacity;
 }
 
 .particleConvergenceCanvas {
@@ -235,6 +240,15 @@
   height: 100%;
 
   pointer-events: none;
+
+  /*
+   * Keep final canvas compositing smooth.
+   */
+  transform:
+    translateZ(0);
+
+  backface-visibility:
+    hidden;
 }
 
 /* =========================================================
@@ -876,10 +890,7 @@
     0 0 auto;
 
   will-change:
-    opacity,
-    transform,
-    filter,
-    clip-path;
+    opacity;
 }
 
 .imageStage {

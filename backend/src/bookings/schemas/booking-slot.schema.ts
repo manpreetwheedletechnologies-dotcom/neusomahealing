@@ -84,9 +84,53 @@ export class BookingSlot {
     index: true,
   })
   isActive: boolean;
+
+    /*
+   * One BookingSlot = one Zoom meeting.
+   *
+   * Individual:
+   * one slot -> one customer -> one meeting
+   *
+   * Webinar:
+   * one slot -> multiple customers -> same meeting
+   */
+  @Prop({
+    trim: true,
+    maxlength: 100,
+  })
+  zoomMeetingId?: string;
+
+  @Prop({
+    trim: true,
+    maxlength: 1000,
+  })
+  zoomJoinUrl?: string;
+
+  @Prop({
+    type: String,
+    enum: [
+      'not_created',
+      'creating',
+      'scheduled',
+      'failed',
+    ],
+    default: 'not_created',
+    index: true,
+  })
+  zoomStatus?:
+    | 'not_created'
+    | 'creating'
+    | 'scheduled'
+    | 'failed';
+
+  @Prop({
+    trim: true,
+    maxlength: 1000,
+  })
+  zoomLastError?: string;
 }
 
-export const BookingSlotSchema =
+ export const BookingSlotSchema =
   SchemaFactory.createForClass(BookingSlot);
 
 /*

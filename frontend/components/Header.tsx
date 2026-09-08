@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 const links = [
   ["Home", "/"],
@@ -40,21 +41,20 @@ export function Header() {
           : "w-[95%] mt-0 rounded-none border border-transparent bg-transparent px-12 py-[18px] shadow-none backdrop-blur-0",
       ].join(" ")}
     >
-      <a
-        href="/"
-        className="flex shrink-0 items-center text-ink no-underline"
-        aria-label="NeusomaHealing Practice home"
-      >
-        <img
-          src={isLight ? "/no_bg_neusomalogo_1.png" : "/no_bg_neusomalogo_1.png"}
-          alt="NeusomaHealing Practice — Heal. Regulate. Transform."
-          className={[
-            "block w-auto object-contain transition-[height] duration-300",
-            scrolled ? "h-[60px]" : "h-[70px]",
-          ].join(" ")}
-        />
-      </a>
-
+   <Link
+  href="/"
+  className="flex shrink-0 items-center text-ink no-underline"
+  aria-label="NeusomaHealing Practice home"
+>
+  <img
+    src="/no_bg_neusomalogo_1.png"
+    alt="NeusomaHealing Practice — Heal. Regulate. Transform."
+    className={[
+      "block w-auto object-contain transition-[height] duration-300",
+      scrolled ? "h-[60px]" : "h-[70px]",
+    ].join(" ")}
+  />
+</Link>
       <nav
         className={[
           "flex flex-1 items-center justify-center gap-[30px]",
@@ -64,33 +64,37 @@ export function Header() {
           open ? "max-[900px]:flex" : "max-[900px]:hidden",
         ].join(" ")}
       >
-        {links.map(([label, href]) => {
-          const isActive = href === "/" ? pathname === "/" : pathname?.startsWith(href);
-          return (
-            <a
-              key={href}
-              href={href}
-              onClick={() => setOpen(false)}
-              className={[
-                "relative whitespace-nowrap py-1.5 text-[14.5px]",
-                isLight ? "text-cream" : "text-ink",
-                "no-underline",
-                "after:absolute after:-bottom-0.5 after:left-0 after:right-0 after:h-px after:origin-left after:scale-x-0 after:bg-gold after:transition-transform after:duration-200 hover:after:scale-x-100",
-                "max-[900px]:w-full max-[900px]:py-2.5",
-                isActive ? "after:scale-x-100" : "",
-              ].join(" ")}
-            >
-              {label}
-            </a>
-          );
-        })}
+       {links.map(([label, href]) => {
+  const isActive =
+    href === "/"
+      ? pathname === "/"
+      : pathname?.startsWith(href);
+
+  return (
+    <Link
+      key={href}
+      href={href}
+      onClick={() => setOpen(false)}
+      className={[
+        "relative whitespace-nowrap py-1.5 text-[14.5px]",
+        isLight ? "text-cream" : "text-ink",
+        "no-underline",
+        "after:absolute after:-bottom-0.5 after:left-0 after:right-0 after:h-px after:origin-left after:scale-x-0 after:bg-gold after:transition-transform after:duration-200 hover:after:scale-x-100",
+        "max-[900px]:w-full max-[900px]:py-2.5",
+        isActive ? "after:scale-x-100" : "",
+      ].join(" ")}
+    >
+      {label}
+    </Link>
+  );
+})}
       </nav>
-<a
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gold px-[22px] py-3 text-sm font-medium text-white no-underline transition-colors duration-200 hover:bg-gold-dark max-[900px]:hidden"
-        href="/book-session"
-      >
-        Book a Session <span className="text-xs">↗</span>
-      </a>
+<Link
+  href="/book-session"
+  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gold px-[22px] py-3 text-sm font-medium text-white no-underline transition-colors duration-200 hover:bg-gold-dark max-[900px]:hidden"
+>
+  Book a Session <span className="text-xs">↗</span>
+</Link>
 
       <button
         className={[

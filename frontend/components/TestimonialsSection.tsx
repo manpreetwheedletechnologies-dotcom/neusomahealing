@@ -1,5 +1,6 @@
 import { Reveal } from "@/components/Reveal";
 import { testimonials } from "@/lib/home-data";
+import Link from "next/link";
 
 export function TestimonialsSection() {
   return (
@@ -72,16 +73,16 @@ export function TestimonialsSection() {
                 </p>
               </div>
 
-              <a
-                href="/contact"
-                className="group relative z-[1] mt-[16px] flex h-[39px] items-center justify-between rounded-full bg-[#fffaf3] px-[14px] text-[10px] font-semibold text-[#292621] transition-all duration-300 hover:bg-[#f4eadc]"
-              >
-                <span>Book a Session</span>
+             <Link
+  href="/contact"
+  className="group relative z-[9999] mt-[16px] flex h-[39px] cursor-pointer items-center justify-between rounded-full bg-[#fffaf3] px-[14px] text-[10px] font-semibold text-[#292621] transition-all duration-300 hover:bg-[#f4eadc]"
+>
+  <span>Book a Session</span>
 
-                <span className="grid h-[25px] w-[25px] place-items-center rounded-full border border-[#d7cbb9] text-[13px] transition-transform duration-300 group-hover:translate-x-[2px]">
-                  →
-                </span>
-              </a>
+  <span className="grid h-[25px] w-[25px] place-items-center rounded-full border border-[#d7cbb9] text-[13px] transition-transform duration-300 group-hover:translate-x-[2px]">
+    →
+  </span>
+</Link>
             </article>
           </Reveal>
         </div>
