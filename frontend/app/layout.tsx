@@ -3,6 +3,7 @@ import "./globals.css";
 import { PreloaderGate } from "@/components/PreloaderGate";
 import { SiteChrome } from "@/components/SiteChrome";
 import { UserAuthProvider } from "@/components/UserAuthProvider";
+import { Preloader } from "@/components/Preloader";
 
 export const metadata: Metadata = {
   title: "NeusomaHealing Practice | Heal. Regulate. Transform.",
@@ -19,11 +20,11 @@ export default function RootLayout({
     <html lang="en" data-scroll-behavior="smooth">
       <body suppressHydrationWarning>
         <UserAuthProvider>
-          <PreloaderGate>
+          <Preloader/>
             <SiteChrome>
               {children}
             </SiteChrome>
-          </PreloaderGate>
+          {/* </Preloader> */}
         </UserAuthProvider>
       </body>
     </html>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Leaf } from "lucide-react";
+import Image from "next/image";
+import { X, Send } from "lucide-react";
 import { getOrCreateChatSessionId, sendChatMessage } from "@/lib/chat-api";
 import { ChatBookingCard } from "@/components/ChatBookingCard";
 
@@ -158,6 +159,36 @@ export default function ChatWidget() {
         .neusoma-notify {
           animation: neusoma-pulse-ring 2.2s ease-out 3;
         }
+
+        /* --- New: floating action button animations --- */
+        @keyframes neusoma-fab-float {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-7px) scale(1.015); }
+        }
+        @keyframes neusoma-fab-pop-in {
+          0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+          60% { transform: scale(1.12) rotate(6deg); opacity: 1; }
+          100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        @keyframes neusoma-fab-icon-wiggle {
+          0%, 100% { transform: rotate(0deg) scale(1); }
+          20% { transform: rotate(-8deg) scale(1.05); }
+          40% { transform: rotate(7deg) scale(1.05); }
+          60% { transform: rotate(-4deg) scale(1.02); }
+          80% { transform: rotate(2deg) scale(1.01); }
+        }
+
+        .neusoma-fab {
+          animation: neusoma-fab-pop-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+            neusoma-fab-float 3.2s ease-in-out 0.55s infinite;
+        }
+        .neusoma-fab:hover {
+          animation-play-state: paused;
+        }
+        .neusoma-fab-icon-idle {
+          animation: neusoma-fab-icon-wiggle 4.5s ease-in-out infinite;
+        }
+
         .neusoma-scroll::-webkit-scrollbar { width: 6px; }
         .neusoma-scroll::-webkit-scrollbar-track { background: transparent; }
         .neusoma-scroll::-webkit-scrollbar-thumb {
@@ -182,8 +213,14 @@ export default function ChatWidget() {
             aria-hidden
           />
           <div className="relative flex items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[linear-gradient(155deg,#C08A45_0%,#e0ab68_100%)] font-serif text-sm text-white shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
-              <Leaf size={18} strokeWidth={1.75} />
+            {/* Header icon (PNG) */}
+            <div className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full">
+              <Image
+                src="images/bot.png"
+                alt="Neusoma Healing logo"
+                fill
+                className="object-cover"
+              />
             </div>
             <div className="flex-1">
               <p className="font-serif text-[15px] font-medium text-white">Neusoma Healing</p>
@@ -286,22 +323,33 @@ export default function ChatWidget() {
         )}
       </div>
 
-      {/* Floating action button */}
+      {/* Floating action button — just the icon, no circle/bg behind it */}
       <button
         onClick={handleToggle}
         aria-label={open ? "Close chat" : "Open chat"}
-        className={`pointer-events-auto relative grid h-16 w-16 place-items-center rounded-full bg-[#2F3F38] text-[#C08A45] shadow-[0_16px_40px_-10px_rgba(47,63,56,0.5)] transition-transform duration-300 hover:scale-105 active:scale-95 ${
-          !everOpened ? "neusoma-notify" : ""
-        }`}
+        className="neusoma-fab pointer-events-auto relative grid h-[92px] w-[92px] place-items-center bg-transparent transition-transform duration-200 hover:scale-110 active:scale-95 max-[500px]:h-20 max-[500px]:w-20"
       >
         {!everOpened && (
-          <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#fdfbf6] bg-[#C08A45]" />
+          <span className="absolute right-1 top-1 h-3.5 w-3.5 rounded-full border-2 border-[#fdfbf6] bg-[#C08A45] shadow-[0_0_0_3px_rgba(192,138,69,0.25)]" />
         )}
-        <span className={`absolute transition-all duration-300 ${open ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100"}`}>
-          <MessageCircle size={26} strokeWidth={1.5} />
+
+        {/* Chat icon (PNG) */}
+        <span
+          className={`absolute grid place-items-center transition-all duration-300 ${
+            open ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100"
+          }`}
+        >
+          <span className={!open ? "neusoma-fab-icon-idle inline-block drop-shadow-[0_10px_18px_rgba(47,63,56,0.35)]" : "inline-block"}>
+            <Image src="images/bot.png" alt="Chat" width={92} height={92} className="object-contain" />
+          </span>
         </span>
-        <span className={`absolute transition-all duration-300 ${open ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0"}`}>
-          <X size={26} strokeWidth={1.5} />
+        {/* Close icon (kept as lucide X) */}
+        <span
+          className={`absolute grid place-items-center transition-all duration-300 ${
+            open ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0"
+          }`}
+        >
+          <X size={30} strokeWidth={1.75} className="text-[#2F3F38] drop-shadow-[0_6px_12px_rgba(47,63,56,0.35)]" />
         </span>
       </button>
     </div>

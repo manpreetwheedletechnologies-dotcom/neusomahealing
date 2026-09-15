@@ -13,7 +13,7 @@
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://192.168.1.16:4000";
+  "http://localhost:4000";
 
 // Public content changes rarely enough that a short revalidate
 // window keeps pages fresh without hitting the API on every request.

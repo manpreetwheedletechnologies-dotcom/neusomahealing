@@ -20,7 +20,7 @@ export class SubscribeApiError extends Error {
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://192.168.1.16:4000";
+  "http://localhost:4000";
 
 function normaliseMessage(payload: unknown): string {
   if (!payload || typeof payload !== "object") {

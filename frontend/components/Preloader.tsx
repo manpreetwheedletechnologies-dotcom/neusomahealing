@@ -228,19 +228,25 @@ function GoldenParticleConvergence({
   * as a soft wave of light expanding outward to
   * fill the ENTIRE screen before the vortex starts
   * pulling everything into the center.
+  *
+  * NOTE: these durations (and VORTEX_DURATION below)
+  * were increased from their original values to slow
+  * the overall intro down — the brand-reveal delays
+  * further down in this file were scaled by the same
+  * ~1.4x factor so everything stays in sync.
   */
     const INTRO_REVEAL_BASE =
-      460;
+      640;
 
     const INTRO_REVEAL_STAGGER =
-      420;
+      580;
 
     const INTRO_REVEAL_DURATION =
       INTRO_REVEAL_BASE +
       INTRO_REVEAL_STAGGER;
 
     const VORTEX_DURATION =
-      1600;
+      2240;
 
     const TOTAL_DURATION =
       INTRO_REVEAL_DURATION +
@@ -1427,7 +1433,7 @@ function GoldenParticleConvergence({
 }
 
 export function Preloader({
-  minimumDuration = 6700,
+  minimumDuration = 10000,
   onDone,
 }: PreloaderProps) {
   const [
@@ -1519,7 +1525,7 @@ export function Preloader({
     const fallbackTimer =
       window.setTimeout(
         finish,
-        7000,
+        9300,
       );
 
     return () => {
@@ -1854,7 +1860,7 @@ export function Preloader({
                 transition={{
                   duration: 4.8,
 
-                  delay: 2.5,
+                  delay: 3.5,
 
                   repeat:
                     Infinity,
@@ -2188,7 +2194,7 @@ export function Preloader({
               }
               transition={{
                 duration: 0.75,
-                delay: 0.72,
+                delay: 1.0,
                 ease: [
                   0.16,
                   1,
@@ -2220,7 +2226,7 @@ export function Preloader({
                     0.9,
 
                   delay:
-                    2.48,
+                    3.47,
 
                   ease: [
                     0.16,
@@ -2250,7 +2256,7 @@ export function Preloader({
                     0.7,
 
                   delay:
-                    2.85,
+                    3.99,
 
                   ease: [
                     0.16,
@@ -2285,7 +2291,7 @@ export function Preloader({
                     0.65,
 
                   delay:
-                    3.02,
+                    4.23,
 
                   ease:
                     "easeOut",

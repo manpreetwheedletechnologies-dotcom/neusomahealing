@@ -495,6 +495,7 @@ export class UsersService {
       phone: user.phone,
       notifyNewSessions: user.notifyNewSessions,
       lastLogin: user.lastLogin,
+      createdAt: (user as any).createdAt,
     };
   }
 }

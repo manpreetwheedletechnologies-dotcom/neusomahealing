@@ -7,6 +7,7 @@ export type SiteUser = {
   phone?: string;
   notifyNewSessions: boolean;
   lastLogin: string | null;
+  createdAt?: string;
 };
 
 export type MyBooking = {

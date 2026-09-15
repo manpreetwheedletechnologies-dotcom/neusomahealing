@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -9,7 +10,10 @@ import {
 } from "react";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 
 import {
   BellRing,
@@ -21,6 +25,8 @@ import {
   Hourglass,
   LogOut,
   ReceiptText,
+  ShieldCheck,
+  Sparkles,
   UserRound,
   Video,
   Wallet,
@@ -123,13 +129,72 @@ function statusTone(status: MyBooking["status"]) {
   }
 }
 
+function statusBar(status: MyBooking["status"]) {
+  switch (status) {
+    case "confirmed":
+      return "bg-[#3b7a4f]";
+    case "completed":
+      return "bg-[#5f7392]";
+    case "cancelled":
+      return "bg-[#a8443f]";
+    default:
+      return "bg-[#c28b4d]";
+  }
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) return "?";
+  if (parts.length === 1)
+    return parts[0].slice(0, 2).toUpperCase();
+
+  return (
+    parts[0][0] + parts[parts.length - 1][0]
+  ).toUpperCase();
+}
+
+function formatMemberSince(value: string | null) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
 export function AccountDashboard() {
+  return (
+    <Suspense
+      fallback={
+        <main className="grid min-h-screen place-items-center bg-[#f6f7f4] px-4 text-center text-xs text-[#76817c]">
+          Loading your account…
+        </main>
+      }
+    >
+      <AccountDashboardInner />
+    </Suspense>
+  );
+}
+
+function AccountDashboardInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const { user, loading, signOut, setUser } =
     useUserAuth();
 
-  const [tab, setTab] = useState<Tab>("overview");
+  const initialTab = useMemo<Tab>(() => {
+    const requested = searchParams.get("tab");
+    return TABS.some((item) => item.key === requested)
+      ? (requested as Tab)
+      : "overview";
+  }, [searchParams]);
+
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   const [overview, setOverview] =
     useState<AccountOverview | null>(null);
@@ -208,42 +273,70 @@ export function AccountDashboard() {
 
   if (loading || !user) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f6f7f4] text-xs text-[#76817c]">
+      <main className="grid min-h-screen place-items-center bg-[#f6f7f4] px-4 text-center text-xs text-[#76817c]">
         Loading your account…
       </main>
     );
   }
 
+  const memberSince = formatMemberSince(
+    user.createdAt || null,
+  );
+
   return (
-    <main className="min-h-screen bg-[#f6f7f4] px-5 py-12 max-[600px]:px-4">
-      <div className="mx-auto w-full max-w-[1080px]">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#fbfaf6,#f2f4f0_60%)] px-4 py-8 sm:px-5 sm:py-12">
+      <div className="mx-auto mt-[25%] w-full max-w-[1080px] sm:mt-16 lg:mt-16">
         {/* HERO */}
 
-        <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#0b3a37] via-[#0d4a44] to-[#123f3a] p-8 text-white max-[600px]:p-6">
+        <section className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-[#0b3a37] via-[#0d4a44] to-[#123f3a] p-5 text-white shadow-[0_30px_70px_-20px_rgba(11,58,55,.45)] sm:rounded-[28px] sm:p-7 md:p-9">
           <div
             aria-hidden
-            className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#c28b4d]/20 blur-3xl"
+            className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full bg-[#c28b4d]/25 blur-[90px]"
           />
 
-          <div className="relative flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-[10px] uppercase tracking-[.22em] text-[#d2a873]">
-                My Account
-              </p>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-32 left-1/4 h-72 w-72 rounded-full bg-white/[0.06] blur-[90px]"
+          />
 
-              <h1 className="mt-3 font-serif text-[clamp(26px,4vw,40px)] leading-[1.1]">
-                Hi, {user.name.split(" ")[0]}
-              </h1>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-[0.04] [background-image:radial-gradient(#fff_1px,transparent_1px)] [background-size:22px_22px]"
+          />
 
-              <p className="mt-2 text-xs text-[#afc2bc]">
-                {user.email}
-              </p>
+          <div className="relative flex flex-col items-start gap-6 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/10 font-serif text-lg backdrop-blur-sm sm:h-16 sm:w-16 sm:text-2xl">
+                {getInitials(user.name)}
+              </div>
+
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[.22em] text-[#d2a873]">
+                  <Sparkles size={11} />
+                  My Account
+                </p>
+
+                <h1 className="mt-2 break-words font-serif text-[clamp(22px,6vw,36px)] leading-[1.1]">
+                  Hi, {user.name.split(" ")[0]}
+                </h1>
+
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-[#afc2bc]">
+                  <span className="break-all">{user.email}</span>
+
+                  {memberSince && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-[#cfe0d8]">
+                      <ShieldCheck size={11} />
+                      Member since {memberSince}
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2.5">
               <Link
                 href="/book-session"
-                className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-xs font-bold text-[#0b3b38] transition hover:bg-[#eef5f1]"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-xs font-bold text-[#0b3b38] shadow-[0_8px_20px_rgba(0,0,0,.15)] transition hover:-translate-y-0.5 hover:bg-[#eef5f1]"
               >
                 <CalendarDays size={14} />
                 Book a session
@@ -255,7 +348,7 @@ export function AccountDashboard() {
                   await signOut();
                   router.replace("/");
                 }}
-                className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/10"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/10"
               >
                 <LogOut size={14} />
                 Sign out
@@ -266,7 +359,7 @@ export function AccountDashboard() {
 
         {/* TABS */}
 
-        <nav className="mt-6 flex flex-wrap gap-2">
+        <nav className="sticky top-0 z-20 mt-5 -mx-4 flex gap-1.5 overflow-x-auto border-b border-[#e2e6e2] bg-white/95 px-4 py-2.5 shadow-[0_10px_30px_rgba(37,56,49,.06)] backdrop-blur-md [scrollbar-width:none] sm:mx-0 sm:mt-6 sm:flex-wrap sm:overflow-visible sm:rounded-full sm:border sm:border-[#e2e6e2] sm:p-1.5 sm:[scrollbar-width:auto] [&::-webkit-scrollbar]:hidden">
           {TABS.map((item) => {
             const active = tab === item.key;
 
@@ -275,14 +368,16 @@ export function AccountDashboard() {
                 key={item.key}
                 type="button"
                 onClick={() => setTab(item.key)}
-                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs font-semibold transition ${
+                className={`relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 sm:px-4 ${
                   active
-                    ? "border-[#0b3b38] bg-[#0b3b38] text-white"
-                    : "border-[#dce1dc] bg-white text-[#52605a] hover:bg-[#f2f5f2]"
+                    ? "bg-[#0b3b38] text-white shadow-[0_6px_16px_rgba(11,59,56,.28)]"
+                    : "text-[#52605a] hover:bg-[#f2f5f2]"
                 }`}
               >
                 <item.icon size={14} />
-                {item.label}
+                <span className="hidden xs:inline sm:inline">
+                  {item.label}
+                </span>
 
                 {item.key === "notifications" &&
                   unreadCount > 0 && (
@@ -302,15 +397,20 @@ export function AccountDashboard() {
         </nav>
 
         {error && (
-          <p className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
+          <p className="mt-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
             {error}
           </p>
         )}
 
         {dataLoading ? (
-          <p className="mt-8 rounded-2xl border border-[#dce1dc] bg-white p-10 text-center text-xs text-[#7a8580]">
-            Loading…
-          </p>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[100px] animate-pulse rounded-2xl border border-[#e7ebe6] bg-white/70 sm:h-[118px]"
+              />
+            ))}
+          </div>
         ) : (
           <div className="mt-6">
             {tab === "overview" && (
@@ -396,30 +496,30 @@ function OverviewTab({
 
   return (
     <>
-      <section className="grid grid-cols-4 gap-4 max-[900px]:grid-cols-2 max-[440px]:grid-cols-1">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
         {cards.map((card) => (
           <article
             key={card.label}
-            className="rounded-2xl border border-[#dce1dc] bg-white p-5"
+            className="group rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(37,56,49,.1)] sm:p-5"
           >
             <div
-              className={`grid h-10 w-10 place-items-center rounded-xl ${card.accent}`}
+              className={`grid h-10 w-10 place-items-center rounded-xl transition-transform duration-200 group-hover:scale-105 sm:h-11 sm:w-11 ${card.accent}`}
             >
               <card.icon size={18} />
             </div>
 
-            <p className="mt-4 font-serif text-3xl text-[#172420]">
+            <p className="mt-3 font-serif text-2xl text-[#172420] sm:mt-4 sm:text-3xl">
               {card.value}
             </p>
 
-            <p className="mt-1 text-xs font-semibold text-[#5e6b65]">
+            <p className="mt-1 text-[11px] font-semibold text-[#5e6b65] sm:text-xs">
               {card.label}
             </p>
           </article>
         ))}
       </section>
 
-      <section className="mt-6 rounded-2xl border border-[#dce1dc] bg-white p-6">
+      <section className="mt-6 rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-6">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
             Next session
@@ -453,7 +553,7 @@ function OverviewTab({
       </section>
 
       {overview.awaitingSchedule.length > 0 && (
-        <section className="mt-6 rounded-2xl border border-[#e4cfaa] bg-[#fffaf1] p-6">
+        <section className="mt-6 rounded-2xl border border-[#e4cfaa] bg-[#fffaf1] p-4 shadow-[0_8px_24px_rgba(154,109,49,.06)] sm:p-6">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[.1em] text-[#9a6d31]">
             <Hourglass size={13} />
             Awaiting a date
@@ -515,7 +615,7 @@ function SessionsTab({
       {groups.map((group) => (
         <section
           key={group.title}
-          className="rounded-2xl border border-[#dce1dc] bg-white p-6"
+          className="rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-6"
         >
           <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
             {group.title}
@@ -552,8 +652,14 @@ function BookingCard({
   const hasDate = !!booking.bookingDate;
 
   return (
-    <article className="rounded-xl border border-[#e7ebe6] bg-[#fbfcfa] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className="group relative overflow-hidden rounded-xl border border-[#e7ebe6] bg-[#fbfcfa] p-4 pl-5 transition-shadow hover:shadow-[0_6px_20px_rgba(37,56,49,.06)]">
+      <span
+        className={`absolute left-0 top-0 h-full w-1 ${statusBar(
+          booking.status,
+        )}`}
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="font-serif text-base text-[#172420]">
             {booking.sessionType}
@@ -587,7 +693,7 @@ function BookingCard({
         </div>
 
         <span
-          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${statusTone(
+          className={`inline-flex w-fit shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${statusTone(
             booking.status,
           )}`}
         >
@@ -635,7 +741,7 @@ function PaymentsTab({
 
   if (overview.payments.length === 0) {
     return (
-      <section className="rounded-2xl border border-[#dce1dc] bg-white p-10 text-center">
+      <section className="rounded-2xl border border-[#dce1dc] bg-white p-8 text-center shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-10">
         <ReceiptText
           size={22}
           className="mx-auto text-[#c7cec9]"
@@ -650,8 +756,8 @@ function PaymentsTab({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#dce1dc] bg-white">
-      <div className="flex items-center justify-between gap-3 border-b border-[#e7ebe6] px-6 py-4">
+    <section className="overflow-hidden rounded-2xl border border-[#dce1dc] bg-white shadow-[0_8px_24px_rgba(37,56,49,.04)]">
+      <div className="flex flex-col gap-1.5 border-b border-[#e7ebe6] bg-[#fbfcfa] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
           Payment history
         </p>
@@ -666,19 +772,19 @@ function PaymentsTab({
         <table className="w-full min-w-[620px] text-left">
           <thead className="bg-[#fbfcfa] text-[10px] uppercase tracking-[.1em] text-[#8b948e]">
             <tr>
-              <th className="px-6 py-3 font-semibold">
+              <th className="px-4 py-3 font-semibold sm:px-6">
                 Session
               </th>
-              <th className="px-6 py-3 font-semibold">
+              <th className="px-4 py-3 font-semibold sm:px-6">
                 Date
               </th>
-              <th className="px-6 py-3 font-semibold">
+              <th className="px-4 py-3 font-semibold sm:px-6">
                 Amount
               </th>
-              <th className="px-6 py-3 font-semibold">
+              <th className="px-4 py-3 font-semibold sm:px-6">
                 Status
               </th>
-              <th className="px-6 py-3 font-semibold">
+              <th className="px-4 py-3 font-semibold sm:px-6">
                 Reference
               </th>
             </tr>
@@ -687,21 +793,21 @@ function PaymentsTab({
           <tbody className="divide-y divide-[#eef1ee] text-xs">
             {overview.payments.map((payment) => (
               <tr key={payment._id}>
-                <td className="px-6 py-4 font-semibold text-[#172420]">
+                <td className="px-4 py-4 font-semibold text-[#172420] sm:px-6">
                   {payment.sessionType}
                 </td>
 
-                <td className="px-6 py-4 text-[#65716b]">
+                <td className="px-4 py-4 text-[#65716b] sm:px-6">
                   {formatDate(
                     payment.bookingDate,
                   )}
                 </td>
 
-                <td className="px-6 py-4 font-semibold text-[#172420]">
+                <td className="px-4 py-4 font-semibold text-[#172420] sm:px-6">
                   ₹{payment.amountPaid}
                 </td>
 
-                <td className="px-6 py-4">
+                <td className="px-4 py-4 sm:px-6">
                   <span
                     className={`rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${
                       payment.paymentStatus ===
@@ -714,7 +820,7 @@ function PaymentsTab({
                   </span>
                 </td>
 
-                <td className="px-6 py-4 text-[10px] text-[#9aa39d]">
+                <td className="px-4 py-4 text-[10px] text-[#9aa39d] sm:px-6">
                   {payment.razorpayPaymentId ||
                     "—"}
                 </td>
@@ -741,8 +847,8 @@ function NotificationsTab({
   onMarkAllRead: () => void;
 }) {
   return (
-    <section className="rounded-2xl border border-[#dce1dc] bg-white">
-      <div className="flex items-center justify-between gap-3 border-b border-[#e7ebe6] px-6 py-4">
+    <section className="overflow-hidden rounded-2xl border border-[#dce1dc] bg-white shadow-[0_8px_24px_rgba(37,56,49,.04)]">
+      <div className="flex items-center justify-between gap-3 border-b border-[#e7ebe6] bg-[#fbfcfa] px-4 py-4 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
           Notifications
         </p>
@@ -759,7 +865,7 @@ function NotificationsTab({
       </div>
 
       {notifications.length === 0 ? (
-        <p className="p-10 text-center text-xs text-[#87908c]">
+        <p className="p-8 text-center text-xs text-[#87908c] sm:p-10">
           Nothing here yet. We&apos;ll let you know
           when a new session opens.
         </p>
@@ -768,40 +874,42 @@ function NotificationsTab({
           {notifications.map((item) => (
             <li
               key={item._id}
-              className={`flex gap-3 px-6 py-4 ${
+              className={`flex flex-col gap-2 px-4 py-4 sm:flex-row sm:gap-3 sm:px-6 ${
                 item.isRead
                   ? ""
                   : "bg-[#fbfaf5]"
               }`}
             >
-              <span
-                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                  item.isRead
-                    ? "bg-transparent"
-                    : "bg-[#c28b4d]"
-                }`}
-              />
+              <div className="flex gap-3">
+                <span
+                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                    item.isRead
+                      ? "bg-transparent"
+                      : "bg-[#c28b4d]"
+                  }`}
+                />
 
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-[#172420]">
-                  {item.title}
-                </p>
-
-                {item.body && (
-                  <p className="mt-1 text-[11px] leading-5 text-[#76817c]">
-                    {item.body}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-[#172420]">
+                    {item.title}
                   </p>
-                )}
 
-                <p className="mt-1.5 text-[10px] text-[#9aa39d]">
-                  {formatDateTime(item.createdAt)}
-                </p>
+                  {item.body && (
+                    <p className="mt-1 text-[11px] leading-5 text-[#76817c]">
+                      {item.body}
+                    </p>
+                  )}
+
+                  <p className="mt-1.5 text-[10px] text-[#9aa39d]">
+                    {formatDateTime(item.createdAt)}
+                  </p>
+                </div>
               </div>
 
               {item.link && (
                 <Link
                   href={item.link}
-                  className="shrink-0 self-center rounded-lg border border-[#dce1dc] px-3 py-1.5 text-[10px] font-semibold text-[#0b3b38] hover:bg-[#f2f5f2]"
+                  className="w-fit shrink-0 self-start rounded-lg border border-[#dce1dc] px-3 py-1.5 text-[10px] font-semibold text-[#0b3b38] hover:bg-[#f2f5f2] sm:self-center"
                 >
                   View
                 </Link>
@@ -926,10 +1034,10 @@ function ProfileTab({
     "w-full rounded-xl border border-[#d9dfda] bg-[#fbfcfa] px-4 py-3 text-sm outline-none focus:border-[#a87843]";
 
   return (
-    <div className="grid grid-cols-2 gap-6 max-[820px]:grid-cols-1">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <form
         onSubmit={handleProfileSubmit}
-        className="rounded-2xl border border-[#dce1dc] bg-white p-6"
+        className="rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-6"
       >
         <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
           Your details
@@ -1027,7 +1135,7 @@ function ProfileTab({
 
       <form
         onSubmit={handlePasswordSubmit}
-        className="h-fit rounded-2xl border border-[#dce1dc] bg-white p-6"
+        className="h-fit rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-6"
       >
         <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
           Change password
