@@ -166,7 +166,7 @@ export function SiteFooter() {
 
             <nav className="space-y-3 sm:space-y-3.5">
               {[
-                ["Insights", "/insights"],
+                ["Blogs", "/blogs"],
                 ["Testimonials", "/testimonials"],
                 ["Book a Session", "/book-session"],
                 ["Contact", "/contact"],

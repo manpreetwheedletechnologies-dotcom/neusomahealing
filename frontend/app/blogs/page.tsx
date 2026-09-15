@@ -72,22 +72,25 @@ export default function InsightsPage() {
   const [featuredPost, ...restPosts] = filtered;
   const showFeatured = active === "All" && Boolean(featuredPost);
 
+  // 👇 no blogs at all from API — show a dedicated "coming soon" state instead of the filter UI
+  const hasNoBlogsAtAll = !isLoading && insights.length === 0;
+
   return (
     <main className="bg-paper font-sans text-ink">
 
       {/* HERO */}
       <section className={`bg-cream ${sectionPadTop} pb-14`}>
         <Reveal>
-          <p className={eyebrow}>INSIGHTS</p>
+          <p className={eyebrow}>BLOGS</p>
           <h1 className="m-0 font-serif text-[clamp(38px,4.6vw,58px)] font-medium leading-[1]">
-            Insights for Your Journey
+            Blogs for Your Journey
           </h1>
           <p className="mt-3 max-w-[440px] text-sm leading-relaxed text-muted">
             Thoughts, tools and reflections to support your growth.
           </p>
         </Reveal>
 
-        {categories.length > 1 && (
+        {!hasNoBlogsAtAll && categories.length > 1 && (
           <div className="mt-9 flex flex-wrap gap-3">
             {categories.map((cat) => (
               <button
@@ -110,6 +113,18 @@ export default function InsightsPage() {
             <SkeletonCard />
             <SkeletonCard />
             <SkeletonCard />
+          </div>
+        ) : hasNoBlogsAtAll ? (
+          /* 🔥 BLOGS COMING SOON — shown when API returns no blogs at all */
+          <div className="flex flex-col items-center justify-center rounded-[28px] bg-cream py-24 text-center">
+            <p className={eyebrow}>STAY TUNED</p>
+            <p className="mt-3 font-serif text-[clamp(26px,3vw,36px)] font-medium text-ink">
+              Blogs Coming Soon
+            </p>
+            <p className="mt-3 max-w-[420px] text-sm leading-relaxed text-muted">
+              We&apos;re working on some great reads for you. Check back soon for
+              new articles and reflections.
+            </p>
           </div>
         ) : (
           <>
