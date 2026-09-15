@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
+import { UsersModule } from '../users/users.module';
 
 import { BookingsController } from './bookings.controller';
 import { BookingsService } from './bookings.service';
 import { ZoomService } from './zoom.service';
 import { BookingMailService } from './booking-mail.service';
+import { RazorpayService } from './razorpay.service';
 
 import {
   Booking,
@@ -26,6 +28,7 @@ import {
 @Module({
   imports: [
     AuthModule,
+    UsersModule,
 
     MongooseModule.forFeature([
       {
@@ -46,7 +49,7 @@ import {
 
   controllers: [BookingsController],
 
-  providers: [BookingsService, ZoomService, BookingMailService],
+  providers: [BookingsService, ZoomService, BookingMailService, RazorpayService],
 
   exports: [BookingsService],
 })

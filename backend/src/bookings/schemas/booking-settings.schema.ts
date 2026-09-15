@@ -38,6 +38,18 @@ export class SessionTypeOption {
   })
   defaultCapacity: number;
 
+  /*
+   * Price in INR (whole rupees).
+   *
+   * 0 = free session, no payment step
+   * required on the booking flow.
+   */
+  @Prop({
+    min: 0,
+    default: 0,
+  })
+  price: number;
+
   @Prop({
     default: true,
   })

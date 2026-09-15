@@ -20,6 +20,17 @@ export class VideosService {
       .exec();
   }
 
+  findAllForAdmin() {
+    return this.videoModel
+      .find()
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  count() {
+    return this.videoModel.countDocuments().exec();
+  }
+
   async update(id: string, data: Partial<Video>) {
     const updated = await this.videoModel
       .findByIdAndUpdate(id, data, { new: true })

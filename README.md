@@ -32,10 +32,10 @@ Then start the API:
 npm run start:dev
 ```
 
-It runs on **http://localhost:4000**. Test it:
+It runs on **http://192.168.1.16:4000**. Test it:
 
 ```bash
-curl http://localhost:4000/enquiries
+curl http://192.168.1.16:4000/enquiries
 ```
 
 ### API endpoints
@@ -68,7 +68,7 @@ npm run dev
 ```
 
 Opens on **http://localhost:3000**. It talks to the backend using
-`NEXT_PUBLIC_API_URL` (defaults to `http://localhost:4000`).
+`NEXT_PUBLIC_API_URL` (defaults to `http://192.168.1.16:4000`).
 
 ## 3. What's already wired up
 

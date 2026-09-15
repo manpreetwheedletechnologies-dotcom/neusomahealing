@@ -18,6 +18,17 @@ export class BlogService {
       .exec();
   }
 
+  findAllForAdmin() {
+    return this.postModel
+      .find()
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  count() {
+    return this.postModel.countDocuments().exec();
+  }
+
   async findBySlug(slug: string) {
     const post = await this.postModel.findOne({ slug, published: true }).exec();
     if (!post) throw new NotFoundException('Post not found');

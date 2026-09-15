@@ -1,7 +1,7 @@
 // Shared Tailwind utility strings so every inner page stays visually
 // consistent with the homepage without repeating long class lists everywhere.
 
-export const sectionPad = "px-[max(5vw,32px)] py-[110px] max-[700px]:px-6 max-[700px]:py-20";
+export const sectionPad = "max-[700px]:px-6 max-[700px]:py-20";
 export const sectionPadTop =
   "px-[max(5vw,32px)] pb-[110px] pt-[170px] max-[700px]:px-6 max-[700px]:pb-20 max-[700px]:pt-[135px]";
 export const eyebrow = "mb-5 text-[11px] font-semibold tracking-[.22em] text-[#8d775f]";

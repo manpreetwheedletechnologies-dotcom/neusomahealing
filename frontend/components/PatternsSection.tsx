@@ -330,7 +330,6 @@ export function PatternsSection() {
           text-[#a6783e]
         "
       >
-        <span>Explore your pattern</span>
 
         <motion.span
           animate={{

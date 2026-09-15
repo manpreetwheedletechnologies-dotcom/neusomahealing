@@ -69,4 +69,28 @@ timeSlot?: string;
   @IsString()
   @MaxLength(1000, { message: 'Message cannot exceed 1000 characters.' })
   message?: string;
+
+  /*
+   * Present only when the selected session
+   * has a price > 0. Verified server-side
+   * against Razorpay before the booking (and
+   * seat) is created.
+   */
+  @Transform(trimValue)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  razorpayOrderId?: string;
+
+  @Transform(trimValue)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  razorpayPaymentId?: string;
+
+  @Transform(trimValue)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  razorpaySignature?: string;
 }

@@ -2,15 +2,23 @@ import { Header } from "@/components/Header";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Reveal } from "@/components/Reveal";
 import { PhotoBlock } from "@/components/PhotoBlock";
-import { coachingPrograms } from "@/lib/site-data";
+import { TestimonialsSection } from "@/components/TestimonialsSection";
+import { getPublicCoachingPrograms, getPublicTestimonials } from "@/lib/site-content-api";
 import { buttonDark, eyebrow, sectionPad, sectionPadTop, textLink } from "@/lib/ui";
 
 export const metadata = { title: "Coaching — NeusomaHealing Practice" };
 
-export default function CoachingPage() {
+// Content is DB-driven and can change without a rebuild.
+export const dynamic = "force-dynamic";
+
+export default async function CoachingPage() {
+  const [coachingPrograms, testimonials] = await Promise.all([
+    getPublicCoachingPrograms(),
+    getPublicTestimonials(),
+  ]);
+
   return (
     <main className="bg-paper font-sans text-ink">
-      <Header />
 
       {/* HERO */}
       <section className={`grid grid-cols-[1fr_1fr] items-center gap-[60px] bg-cream ${sectionPadTop} max-[900px]:grid-cols-1 max-[900px]:gap-8`}>
@@ -38,7 +46,7 @@ export default function CoachingPage() {
         </Reveal>
         <div className="grid grid-cols-4 gap-5 max-[1000px]:grid-cols-2 max-[700px]:grid-cols-1">
           {coachingPrograms.map((p) => (
-            <Reveal key={p.slug} className="flex flex-col justify-between rounded-2xl border border-[#e7ded0] bg-[#fffdf8] p-6">
+            <Reveal key={p._id} className="flex flex-col justify-between rounded-2xl border border-[#e7ded0] bg-[#fffdf8] p-6">
               <div>
                 <h3 className="mb-3 font-serif text-xl font-medium leading-tight">{p.title}</h3>
                 <p className="text-xs leading-[1.6] text-muted">{p.description}</p>
@@ -49,6 +57,9 @@ export default function CoachingPage() {
             </Reveal>
           ))}
         </div>
+        {coachingPrograms.length === 0 && (
+          <p className="text-center text-sm text-muted">Coaching options will appear here soon.</p>
+        )}
       </section>
 
       {/* SUPPORT BANNER */}
@@ -65,7 +76,9 @@ export default function CoachingPage() {
         </Reveal>
       </section>
 
-      <SiteFooter />
+      {/* TESTIMONIALS */}
+      <TestimonialsSection testimonials={testimonials} />
+
     </main>
   );
 }

@@ -8,17 +8,26 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 
+import {
+  UserAuthGuard,
+  UserRequest,
+} from '../users/user-auth.guard';
+
 import { BookingsService } from './bookings.service';
 
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { BookingAvailabilityDto } from './dto/booking-availability.dto';
+import { CreatePaymentOrderDto } from './dto/create-payment-order.dto';
+import { CreateIndividualRequestDto } from './dto/create-individual-request.dto';
 
 import {
+  AssignSessionDto,
   CreateBookingSlotDto,
   UpdateBookingSlotDto,
   UpdateBookingStatusDto,
@@ -71,13 +80,70 @@ getAvailability(
 }
 
   /*
+   * Creates a Razorpay order for a session
+   * that requires payment (price > 0).
+   *
+   * Amount is always computed server-side
+   * from the session's stored price — never
+   * trust an amount sent by the client.
+   */
+  @Post('payment/order')
+  createPaymentOrder(
+    @Body() dto: CreatePaymentOrderDto,
+  ) {
+    return this.bookingsService.createPaymentOrder(dto);
+  }
+
+  /*
    * User creates booking.
+   *
+   * For paid sessions, the request must
+   * include razorpayOrderId/PaymentId/Signature
+   * — verified server-side before the seat
+   * is reserved.
    */
   @Post()
+  @UseGuards(UserAuthGuard)
   create(
     @Body() dto: CreateBookingDto,
+    @Req() request: UserRequest,
   ) {
-    return this.bookingsService.create(dto);
+    return this.bookingsService.create(
+      dto,
+      request.user!.id,
+    );
+  }
+
+  /*
+   * Discovery Call, 1:1 Coaching, Deep Transformation.
+   *
+   * No slot exists yet — user just submits their
+   * details + a preferred date/time. Admin assigns
+   * the real date/time later.
+   */
+  @Post('request')
+  @UseGuards(UserAuthGuard)
+  createIndividualRequest(
+    @Body() dto: CreateIndividualRequestDto,
+    @Req() request: UserRequest,
+  ) {
+    return this.bookingsService.createIndividualRequestBooking(
+      dto,
+      request.user!.id,
+    );
+  }
+
+  /*
+   * Signed-in visitor's own dashboard — their
+   * sessions, payment history and stats.
+   */
+  @Get('my')
+  @UseGuards(UserAuthGuard)
+  getMyBookings(@Req() request: UserRequest) {
+    return this.bookingsService.getMyAccountOverview({
+      id: request.user!.id,
+      email: request.user!.email,
+    });
   }
 
   /* =======================================================
@@ -91,6 +157,12 @@ getAvailability(
   }
 
   @UseGuards(AdminAuthGuard)
+  @Get('admin/overview')
+  getBookingsOverview() {
+    return this.bookingsService.getBookingsOverview();
+  }
+
+  @UseGuards(AdminAuthGuard)
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
@@ -99,6 +171,24 @@ getAvailability(
     return this.bookingsService.updateStatus(
       id,
       dto.status,
+    );
+  }
+
+  /*
+   * Admin assigns the real date/time for a
+   * Coaching / Deep Transformation request.
+   * Creates the Zoom meeting and sends the
+   * confirmation email to the user.
+   */
+  @UseGuards(AdminAuthGuard)
+  @Patch(':id/assign')
+  assignSession(
+    @Param('id') id: string,
+    @Body() dto: AssignSessionDto,
+  ) {
+    return this.bookingsService.assignSession(
+      id,
+      dto,
     );
   }
 
@@ -161,6 +251,23 @@ removeAdminSlot(
   @Param('id') id: string,
 ) {
   return this.bookingsService.removeAdminSlot(
+    id,
+  );
+}
+
+/*
+ * Manually (re)create the Zoom meeting for a
+ * webinar slot. Covers slots created before
+ * eager Zoom creation existed, and gives the
+ * admin a way to retry after a failure instead
+ * of waiting for the first booking.
+ */
+@UseGuards(AdminAuthGuard)
+@Post('admin/slots/:id/zoom')
+createZoomForSlot(
+  @Param('id') id: string,
+) {
+  return this.bookingsService.createZoomForSlot(
     id,
   );
 }

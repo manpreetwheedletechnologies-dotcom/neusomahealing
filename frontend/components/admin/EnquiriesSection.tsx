@@ -122,8 +122,10 @@ function formatDate(
 }
 
 function initials(
-  name: string,
+  name?: string | null,
 ) {
+  if (!name || !name.trim()) return "?";
+
   return name
     .trim()
     .split(/\s+/)
@@ -296,7 +298,7 @@ export function EnquiriesSection({
         intercepting admin interactions.
       */}
 
-      <section className="relative z-[10000] pointer-events-auto">
+      <section className="relative z-0 pointer-events-auto">
 
         {/* =================================================
             STATS

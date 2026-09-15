@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -9,6 +10,10 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { ZoomService } from './zoom.service';
 import { BookingMailService } from './booking-mail.service';
+import { RazorpayService } from './razorpay.service';
+import { UsersService } from '../users/users.service';
+import { UserMailService } from '../users/user-mail.service';
+import { AudienceService } from '../users/audience.service';
 
 import {
   Model,
@@ -16,11 +21,21 @@ import {
 } from 'mongoose';
 
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { CreatePaymentOrderDto } from './dto/create-payment-order.dto';
+import { CreateIndividualRequestDto } from './dto/create-individual-request.dto';
 
 import {
+  AssignSessionDto,
   CreateBookingSlotDto,
   UpdateBookingSlotDto,
 } from './dto/admin-booking.dto';
+
+/*
+ * Session types that are pure leads — a person to
+ * follow up with by call. Admin never assigns a
+ * date/time for these; they stay unassigned forever.
+ */
+const LEAD_ONLY_SESSION_TYPES = ['discovery call'];
 
 import {
   Booking,
@@ -54,6 +69,11 @@ type PublicSlotStatus =
 
 @Injectable()
 export class BookingsService {
+  private readonly logger =
+    new Logger(
+      BookingsService.name,
+    );
+
   constructor(
     @InjectModel(Booking.name)
     private readonly bookingModel:
@@ -71,6 +91,14 @@ private readonly zoomService:
   ZoomService,
   private readonly bookingMailService:
   BookingMailService,
+  private readonly razorpayService:
+  RazorpayService,
+  private readonly usersService:
+  UsersService,
+  private readonly userMailService:
+  UserMailService,
+  private readonly audienceService:
+  AudienceService,
 ) {}
 
   /* =======================================================
@@ -105,6 +133,9 @@ private readonly zoomService:
               defaultCapacity:
                 item.defaultCapacity ||
                 1,
+
+              price:
+                item.price || 0,
 
               isActive:
                 item.isActive,
@@ -372,6 +403,12 @@ const storedSlots =
           status = 'unavailable';
         }
 
+        const price =
+          this.resolveSlotPrice(
+            slot.price,
+            session?.price,
+          );
+
         return {
           id:
             slot._id.toString(),
@@ -405,6 +442,16 @@ const storedSlots =
             slot.remainingSeats,
 
           status,
+
+          /*
+           * Effective price for THIS slot —
+           * customer-facing pages must use this,
+           * not the session type's global price.
+           */
+          price,
+
+          isPaid:
+            price > 0,
         };
       });
 
@@ -455,11 +502,146 @@ const storedSlots =
   }
 
   /* =======================================================
+     CREATE PAYMENT ORDER
+  ======================================================= */
+
+  async createPaymentOrder(
+    dto: CreatePaymentOrderDto,
+  ) {
+    const settings =
+      await this.getOrCreateSettings();
+
+    const activeSession =
+      this.findActiveSession(
+        settings,
+        dto.sessionType,
+      );
+
+    this.validateBookingDate(
+      dto.bookingDate,
+      settings.maxMonthsAhead,
+    );
+
+    const normalizedTime =
+      this.normalizeSingleTime(
+        dto.timeSlot,
+      );
+
+    this.validateFutureTime(
+      dto.bookingDate,
+      normalizedTime,
+    );
+
+    /*
+     * Make sure a bookable slot actually
+     * exists before charging the customer.
+     *
+     * Prefer an exact slotId lookup (the
+     * frontend now sends this) and fall back to
+     * date+time+sessionType for older clients.
+     */
+    const slot =
+      dto.slotId &&
+      Types.ObjectId.isValid(dto.slotId)
+        ? await this.slotModel
+            .findOne({
+              _id: dto.slotId,
+
+              isActive:
+                true,
+
+              remainingSeats: {
+                $gt: 0,
+              },
+            })
+            .exec()
+        : await this.slotModel
+            .findOne({
+              bookingDate:
+                dto.bookingDate,
+
+              timeSlot:
+                normalizedTime,
+
+              sessionType:
+                activeSession.title,
+
+              isActive:
+                true,
+
+              remainingSeats: {
+                $gt: 0,
+              },
+            })
+            .exec();
+
+    if (!slot) {
+      throw new BadRequestException(
+        'The selected session slot is no longer available.',
+      );
+    }
+
+    /*
+     * IMPORTANT: this specific slot's own price
+     * (if the admin set one) always wins over the
+     * session type's default price.
+     */
+    const effectivePrice =
+      this.resolveSlotPrice(
+        slot.price,
+        activeSession.price,
+      );
+
+    if (
+      !effectivePrice ||
+      effectivePrice <= 0
+    ) {
+      throw new BadRequestException(
+        'This session does not require payment.',
+      );
+    }
+
+    const order =
+      await this.razorpayService.createOrder(
+        {
+          amountRupees:
+            effectivePrice,
+
+          receipt:
+            `bk_${Date.now()}_${slot._id.toString().slice(-6)}`,
+
+          notes: {
+            sessionType:
+              activeSession.title,
+
+            bookingDate:
+              dto.bookingDate,
+
+            timeSlot:
+              normalizedTime,
+          },
+        },
+      );
+
+    return {
+      success: true,
+
+      data: {
+        orderId: order.orderId,
+        amount: order.amount,
+        currency: order.currency,
+        priceRupees: effectivePrice,
+      },
+    };
+  }
+
+  /* =======================================================
      CREATE BOOKING
   ======================================================= */
 
   async create(
     dto: CreateBookingDto,
+    ownerUserId?: string,
   ) {
     const settings =
       await this.getOrCreateSettings();
@@ -554,6 +736,68 @@ const storedSlots =
       throw new BadRequestException(
         'The selected session type is no longer available.',
       );
+    }
+
+    /*
+     * IMPORTANT: this specific slot's own price
+     * (if the admin set one) always wins over the
+     * session type's default price. This is the
+     * single source of truth used for the payment
+     * check below AND for the amount persisted on
+     * the booking record.
+     */
+    const effectivePrice =
+      this.resolveSlotPrice(
+        slot.price,
+        activeSession.price,
+      );
+
+    /*
+     * PAYMENT VERIFICATION
+     *
+     * Sessions with price > 0 must arrive
+     * with a Razorpay payment already made
+     * for this exact order. We verify the
+     * HMAC signature ourselves — the client
+     * cannot forge this without the secret.
+     *
+     * This runs BEFORE the seat is reserved
+     * so an invalid/forged payment never
+     * holds up a seat.
+     */
+    if (
+      effectivePrice &&
+      effectivePrice > 0
+    ) {
+      if (
+        !dto.razorpayOrderId ||
+        !dto.razorpayPaymentId ||
+        !dto.razorpaySignature
+      ) {
+        throw new BadRequestException(
+          'Payment is required for this session.',
+        );
+      }
+
+      const isSignatureValid =
+        this.razorpayService.verifySignature(
+          {
+            razorpayOrderId:
+              dto.razorpayOrderId,
+
+            razorpayPaymentId:
+              dto.razorpayPaymentId,
+
+            razorpaySignature:
+              dto.razorpaySignature,
+          },
+        );
+
+      if (!isSignatureValid) {
+        throw new BadRequestException(
+          'We could not verify your payment. Please try again or contact support.',
+        );
+      }
     }
 
     /*
@@ -671,9 +915,24 @@ const storedSlots =
       settings.timezone,
     );
 
+  await this.audienceService.capture({
+    email,
+    name: dto.name,
+    phone: dto.phone,
+    source: 'booking',
+    hasAccount: !!ownerUserId,
+  });
+
   const booking =
     await this.bookingModel.create(
       {
+        userId:
+          ownerUserId
+            ? new Types.ObjectId(
+                ownerUserId,
+              )
+            : undefined,
+
         name:
           dto.name,
 
@@ -723,6 +982,26 @@ const storedSlots =
 
         status:
           'pending',
+
+        paymentStatus:
+          effectivePrice &&
+          effectivePrice > 0
+            ? 'paid'
+            : 'not_required',
+
+        amountPaid:
+          effectivePrice &&
+          effectivePrice > 0
+            ? effectivePrice
+            : undefined,
+
+        razorpayOrderId:
+          dto.razorpayOrderId ||
+          undefined,
+
+        razorpayPaymentId:
+          dto.razorpayPaymentId ||
+          undefined,
       },
     );
 
@@ -867,6 +1146,12 @@ try {
 
         emailStatus,
 
+      paymentStatus:
+        booking.paymentStatus,
+
+      amountPaid:
+        booking.amountPaid,
+
       remainingSeats:
         reservedSlot.remainingSeats,
     },
@@ -915,6 +1200,425 @@ try {
   }
 
   /* =======================================================
+     PUBLIC — INDIVIDUAL REQUEST (NO FIXED SLOT)
+
+     Used by Discovery Call, 1:1 Coaching and
+     Deep Transformation forms. No BookingSlot is
+     touched here — this just records the request.
+     Admin assigns the real date/time afterwards
+     (see assignSession below), except for Discovery
+     Call, which always stays a lead.
+  ======================================================= */
+
+  /* =======================================================
+     USER ACCOUNT — MY SESSIONS & PAYMENTS
+
+     Everything a signed-in visitor sees on their own
+     dashboard. Scoped by userId, with a fallback on
+     email so bookings made before the user registered
+     (or while signed out) still show up under their
+     account.
+  ======================================================= */
+
+  async getMyAccountOverview(user: {
+    id: string;
+    email: string;
+  }) {
+    const bookings = await this.bookingModel
+      .find({
+        $or: [
+          { userId: new Types.ObjectId(user.id) },
+          { email: user.email.toLowerCase() },
+        ],
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    const settings =
+      await this.getOrCreateSettings();
+
+    const todayKey = this.getTodayKey(
+      settings.timezone,
+    );
+
+    const serialized = bookings.map((booking) =>
+      this.serializeMyBooking(booking),
+    );
+
+    /*
+     * "Upcoming" means confirmed-or-pending with a
+     * real assigned date that hasn't passed. Leads
+     * awaiting an admin date land in `awaitingSchedule`
+     * instead of silently disappearing.
+     */
+    const upcoming = serialized.filter(
+      (booking) =>
+        booking.status !== 'cancelled' &&
+        booking.status !== 'completed' &&
+        !!booking.bookingDate &&
+        booking.bookingDate >= todayKey,
+    );
+
+    const awaitingSchedule = serialized.filter(
+      (booking) =>
+        booking.status !== 'cancelled' &&
+        booking.isAssigned === false &&
+        !booking.bookingDate,
+    );
+
+    const past = serialized.filter(
+      (booking) =>
+        booking.status === 'completed' ||
+        (!!booking.bookingDate &&
+          booking.bookingDate < todayKey),
+    );
+
+    const payments = serialized
+      .filter(
+        (booking) =>
+          booking.paymentStatus === 'paid' ||
+          booking.paymentStatus === 'failed',
+      )
+      .map((booking) => ({
+        _id: booking._id,
+        sessionType: booking.sessionType,
+        bookingDate: booking.bookingDate,
+        timeSlot: booking.timeSlot,
+        amountPaid: booking.amountPaid || 0,
+        paymentStatus: booking.paymentStatus,
+        razorpayPaymentId:
+          booking.razorpayPaymentId,
+        createdAt: booking.createdAt,
+      }));
+
+    const totalPaid = payments
+      .filter(
+        (payment) =>
+          payment.paymentStatus === 'paid',
+      )
+      .reduce(
+        (sum, payment) =>
+          sum + (payment.amountPaid || 0),
+        0,
+      );
+
+    return {
+      success: true,
+
+      data: {
+        stats: {
+          totalBookings: serialized.length,
+          upcoming: upcoming.length,
+          completed: serialized.filter(
+            (booking) =>
+              booking.status === 'completed',
+          ).length,
+          totalPaid,
+        },
+
+        upcoming,
+        awaitingSchedule,
+        past,
+        payments,
+
+        timezone: settings.timezone,
+      },
+    };
+  }
+
+  private serializeMyBooking(
+    booking: BookingDocument,
+  ) {
+    return {
+      _id: booking._id.toString(),
+      sessionType: booking.sessionType,
+      bookingDate: booking.bookingDate,
+      timeSlot: booking.timeSlot,
+      preferredDate: booking.preferredDate,
+      preferredTimeSlot:
+        booking.preferredTimeSlot,
+      bookingMode: booking.bookingMode,
+      status: booking.status,
+      isAssigned: booking.isAssigned,
+      message: booking.message,
+
+      /*
+       * Only expose the Zoom link once the session
+       * is actually confirmed — a pending request
+       * has nothing to join yet.
+       */
+      zoomJoinUrl:
+        booking.status === 'confirmed' ||
+        booking.status === 'completed'
+          ? booking.zoomJoinUrl
+          : undefined,
+
+      paymentStatus: booking.paymentStatus,
+      amountPaid: booking.amountPaid,
+      razorpayPaymentId:
+        booking.razorpayPaymentId,
+
+      createdAt: (booking as any).createdAt,
+    };
+  }
+
+  private getTodayKey(timezone: string) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+    } catch {
+      return new Date()
+        .toISOString()
+        .slice(0, 10);
+    }
+  }
+
+  async createIndividualRequestBooking(
+    dto: CreateIndividualRequestDto,
+    ownerUserId?: string,
+  ) {
+    const settings =
+      await this.getOrCreateSettings();
+
+    const activeSession =
+      this.findActiveSession(
+        settings,
+        dto.sessionType,
+      );
+
+    if (
+      activeSession.bookingMode ===
+      'webinar'
+    ) {
+      throw new BadRequestException(
+        'Please use the webinar booking flow for this session.',
+      );
+    }
+
+    const email =
+      dto.email.trim().toLowerCase();
+
+    await this.audienceService.capture({
+      email,
+      name: dto.name,
+      phone: dto.phone,
+      source: 'booking',
+      hasAccount: !!ownerUserId,
+    });
+
+    const booking =
+      await this.bookingModel.create({
+        userId: ownerUserId
+          ? new Types.ObjectId(ownerUserId)
+          : undefined,
+
+        name: dto.name,
+        email,
+        phone: dto.phone || undefined,
+        sessionType: activeSession.title,
+        bookingMode: 'individual',
+
+        preferredDate:
+          dto.preferredDate || undefined,
+
+        preferredTimeSlot:
+          dto.preferredTimeSlot ||
+          undefined,
+
+        isAssigned: false,
+        status: 'pending',
+        paymentStatus: 'not_required',
+        message: dto.message || undefined,
+      });
+
+    return {
+      success: true,
+
+      message:
+        'Thank you! We have received your request. Our team will reach out shortly to confirm.',
+
+      data: {
+        id: booking._id.toString(),
+        sessionType: booking.sessionType,
+        preferredDate: booking.preferredDate,
+        preferredTimeSlot:
+          booking.preferredTimeSlot,
+        status: booking.status,
+      },
+    };
+  }
+
+  /* =======================================================
+     ADMIN — ASSIGN SESSION DATE/TIME
+
+     Admin sets the real bookingDate/timeSlot for a
+     previously-unassigned individual request (Coaching,
+     Deep Transformation). This creates the Zoom meeting
+     and sends the confirmation email — Discovery Call
+     bookings are rejected here since they never get a
+     scheduled session.
+  ======================================================= */
+
+  async assignSession(
+    id: string,
+    dto: AssignSessionDto,
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(
+        'Invalid booking id.',
+      );
+    }
+
+    const booking =
+      await this.bookingModel
+        .findById(id)
+        .exec();
+
+    if (!booking) {
+      throw new NotFoundException(
+        'Booking not found.',
+      );
+    }
+
+    if (
+      booking.bookingMode === 'webinar'
+    ) {
+      throw new BadRequestException(
+        'Webinar bookings are scheduled through slot management, not here.',
+      );
+    }
+
+    if (
+      LEAD_ONLY_SESSION_TYPES.includes(
+        booking.sessionType
+          .trim()
+          .toLowerCase(),
+      )
+    ) {
+      throw new BadRequestException(
+        'Discovery Call is a lead — it does not get an assigned session date.',
+      );
+    }
+
+    const settings =
+      await this.getOrCreateSettings();
+
+    const activeSession =
+      this.findActiveSession(
+        settings,
+        booking.sessionType,
+      );
+
+    const normalizedTime =
+      this.normalizeSingleTime(
+        dto.timeSlot,
+      );
+
+    this.validateBookingDate(
+      dto.bookingDate,
+      settings.maxMonthsAhead,
+    );
+
+    const currentIst = this.getIstNow();
+
+    if (
+      dto.bookingDate ===
+        currentIst.date &&
+      this.parseTimeSlotToMinutes(
+        normalizedTime,
+      ) <= currentIst.minutes
+    ) {
+      throw new BadRequestException(
+        'Please select a future time.',
+      );
+    }
+
+    const meeting =
+      await this.zoomService.createMeeting(
+        {
+          topic:
+            `Neusoma Healing - ${booking.sessionType}`,
+
+          startTime:
+            this.buildZoomStartTime(
+              dto.bookingDate,
+              normalizedTime,
+            ),
+
+          duration:
+            this.parseSessionDuration(
+              activeSession.duration,
+            ),
+
+          timezone:
+            settings.timezone ||
+            'Asia/Kolkata',
+        },
+      );
+
+    booking.bookingDate = dto.bookingDate;
+    booking.timeSlot = normalizedTime;
+    booking.isAssigned = true;
+    booking.status = 'confirmed';
+    booking.zoomMeetingId = meeting.meetingId;
+    booking.zoomJoinUrl = meeting.joinUrl;
+    booking.emailStatus = 'pending';
+
+    await booking.save();
+
+    let emailStatus: 'sent' | 'failed' =
+      'sent';
+
+    try {
+      await this.bookingMailService.sendBookingConfirmation(
+        {
+          name: booking.name,
+          email: booking.email,
+          sessionType: booking.sessionType,
+          bookingDate: booking.bookingDate,
+          timeSlot: booking.timeSlot,
+
+          timezone:
+            settings.timezone ||
+            'Asia/Kolkata',
+
+          zoomJoinUrl: booking.zoomJoinUrl,
+        },
+      );
+
+      booking.emailStatus = 'sent';
+      booking.emailLastError = undefined;
+    } catch (emailError) {
+      emailStatus = 'failed';
+
+      booking.emailStatus = 'failed';
+
+      booking.emailLastError = (
+        emailError instanceof Error
+          ? emailError.message
+          : 'Unable to send confirmation email.'
+      ).slice(0, 1000);
+    }
+
+    await booking.save();
+
+    return {
+      success: true,
+
+      message:
+        'Session assigned and confirmation email sent.',
+
+      data: this.sanitizeBooking(
+        booking.toObject(),
+      ),
+    };
+  }
+
+  /* =======================================================
      ADMIN — ALL BOOKINGS
   ======================================================= */
 
@@ -930,6 +1634,384 @@ try {
       })
       .lean()
       .exec();
+  }
+
+  /* =======================================================
+     ADMIN — BOOKINGS GROUPED BY SESSION TYPE -> SLOT
+  ======================================================= */
+
+  /*
+   * Dashboard drill-down:
+   *
+   *   Session Type (e.g. "Webinar")
+   *     -> its time slots (each date + time)
+   *          -> everyone who registered for
+   *             that exact slot, with their
+   *             details + payment status.
+   *
+   * Also carries each slot's Zoom join link so
+   * admin can join straight from here, for both
+   * individual sessions AND webinars.
+   */
+  /* =======================================================
+     ADMIN — QUICK STATS (used by dashboard overview)
+  ======================================================= */
+
+  async countStats() {
+    const [total, pending] = await Promise.all([
+      this.bookingModel.countDocuments().exec(),
+      this.bookingModel.countDocuments({ status: 'pending' }).exec(),
+    ]);
+
+    return { total, new: pending };
+  }
+
+  async getBookingsOverview() {
+    const settings =
+      await this.getOrCreateSettings();
+
+    const [
+      slots,
+      bookings,
+    ] = await Promise.all([
+      this.slotModel
+        .find()
+        .sort({
+          bookingDate:
+            1,
+          timeSlot:
+            1,
+        })
+        .lean()
+        .exec(),
+
+      this.bookingModel
+        .find()
+        .select(
+          'name email phone slotId sessionType bookingDate timeSlot status paymentStatus amountPaid message createdAt',
+        )
+        .sort({
+          createdAt:
+            -1,
+        })
+        .lean()
+        .exec() as Promise<
+        Array<
+          Booking & {
+            _id: Types.ObjectId;
+            createdAt?: Date;
+          }
+        >
+      >,
+    ]);
+
+    /*
+     * Group bookings by slotId when present.
+     * Older bookings (pre-slotId) fall back to
+     * a date+time+sessionType composite key so
+     * they still show up under the right slot.
+     */
+    const bookingsBySlot =
+      new Map<
+        string,
+        typeof bookings
+      >();
+
+    const keyFor = (
+      slotId:
+        unknown,
+      sessionType:
+        string,
+      bookingDate:
+        string,
+      timeSlot:
+        string,
+    ) =>
+      slotId
+        ? String(slotId)
+        : `${sessionType}|${bookingDate}|${timeSlot}`;
+
+    for (
+      const booking of
+      bookings
+    ) {
+      const key =
+        keyFor(
+          booking.slotId,
+          booking.sessionType,
+          booking.bookingDate,
+          booking.timeSlot,
+        );
+
+      const existing =
+        bookingsBySlot.get(
+          key,
+        ) || [];
+
+      existing.push(
+        booking,
+      );
+
+      bookingsBySlot.set(
+        key,
+        existing,
+      );
+    }
+
+    const sessionGroups =
+      new Map<
+        string,
+        {
+          title: string;
+          bookingMode:
+            'individual' | 'webinar';
+          duration: string;
+          slots: any[];
+        }
+      >();
+
+    for (
+      const slot of
+      slots
+    ) {
+      const session =
+        settings.sessionTypes.find(
+          (item) =>
+            item.title ===
+            slot.sessionType,
+        );
+
+      const resolvedPrice =
+        this.resolveSlotPrice(
+          slot.price,
+          session?.price,
+        );
+
+      const key =
+        keyFor(
+          slot._id,
+          slot.sessionType,
+          slot.bookingDate,
+          slot.timeSlot,
+        );
+
+      const registrations = (
+        bookingsBySlot.get(
+          key,
+        ) || []
+      ).map((booking) => ({
+        id: String(booking._id),
+        name: booking.name,
+        email: booking.email,
+        phone: booking.phone,
+        status: booking.status,
+        paymentStatus:
+          booking.paymentStatus,
+        amountPaid:
+          booking.amountPaid,
+        message: booking.message,
+        createdAt:
+          booking.createdAt,
+      }));
+
+      const slotValue = {
+        id: slot._id.toString(),
+        bookingDate: slot.bookingDate,
+        timeSlot: slot.timeSlot,
+        capacity: slot.capacity,
+        bookedCount: slot.bookedCount,
+        remainingSeats:
+          slot.remainingSeats,
+        isActive: slot.isActive,
+        price: resolvedPrice,
+        isPaid: resolvedPrice > 0,
+        zoomJoinUrl: slot.zoomJoinUrl,
+        zoomMeetingId:
+          slot.zoomMeetingId,
+        zoomStatus: slot.zoomStatus,
+        registrations,
+        registrationCount:
+          registrations.length,
+      };
+
+      const group =
+        sessionGroups.get(
+          slot.sessionType,
+        );
+
+      if (group) {
+        group.slots.push(
+          slotValue,
+        );
+      } else {
+        sessionGroups.set(
+          slot.sessionType,
+          {
+            title:
+              slot.sessionType,
+
+            bookingMode:
+              slot.bookingMode,
+
+            duration:
+              session?.duration ||
+              '',
+
+            slots: [
+              slotValue,
+            ],
+          },
+        );
+      }
+    }
+
+    /*
+     * Bookings whose slot has since been
+     * deleted still deserve to be visible
+     * somewhere on the dashboard — group them
+     * under their original sessionType too,
+     * as a "slot" made purely from the booking
+     * date/time (no live capacity data).
+     */
+    for (
+      const [
+        key,
+        groupBookings,
+      ] of bookingsBySlot
+    ) {
+      const alreadyCovered =
+        slots.some(
+          (slot) =>
+            keyFor(
+              slot._id,
+              slot.sessionType,
+              slot.bookingDate,
+              slot.timeSlot,
+            ) === key,
+        );
+
+      if (alreadyCovered) continue;
+
+      const sample =
+        groupBookings[0];
+
+      if (!sample) continue;
+
+      const registrations =
+        groupBookings.map(
+          (booking) => ({
+            id: String(booking._id),
+            name: booking.name,
+            email: booking.email,
+            phone: booking.phone,
+            status: booking.status,
+            paymentStatus:
+              booking.paymentStatus,
+            amountPaid:
+              booking.amountPaid,
+            message: booking.message,
+            createdAt:
+              booking.createdAt,
+          }),
+        );
+
+      const slotValue = {
+        id: key,
+        bookingDate:
+          sample.bookingDate,
+        timeSlot:
+          sample.timeSlot,
+        capacity:
+          registrations.length,
+        bookedCount:
+          registrations.length,
+        remainingSeats: 0,
+        isActive: false,
+        price: 0,
+        isPaid: false,
+        zoomJoinUrl: undefined,
+        zoomMeetingId: undefined,
+        zoomStatus: undefined,
+        registrations,
+        registrationCount:
+          registrations.length,
+      };
+
+      const group =
+        sessionGroups.get(
+          sample.sessionType,
+        );
+
+      if (group) {
+        group.slots.push(
+          slotValue,
+        );
+      } else {
+        sessionGroups.set(
+          sample.sessionType,
+          {
+            title:
+              sample.sessionType,
+
+            bookingMode:
+              'individual',
+
+            duration: '',
+
+            slots: [
+              slotValue,
+            ],
+          },
+        );
+      }
+    }
+
+    const sessionTypesOverview =
+      Array.from(
+        sessionGroups.values(),
+      ).map((group) => ({
+        ...group,
+
+        slots:
+          group.slots.sort(
+            (a, b) =>
+              a.bookingDate ===
+              b.bookingDate
+                ? a.timeSlot.localeCompare(
+                    b.timeSlot,
+                  )
+                : a.bookingDate.localeCompare(
+                    b.bookingDate,
+                  ),
+          ),
+
+        totalSlots:
+          group.slots.length,
+
+        totalBookings:
+          group.slots.reduce(
+            (sum, slot) =>
+              sum +
+              slot.registrationCount,
+            0,
+          ),
+      }));
+
+    sessionTypesOverview.sort(
+      (a, b) =>
+        a.title.localeCompare(
+          b.title,
+        ),
+    );
+
+    return {
+      success: true,
+
+      data: {
+        sessionTypes:
+          sessionTypesOverview,
+      },
+    };
   }
 
   /* =======================================================
@@ -1427,6 +2509,12 @@ try {
             slot.sessionType,
         );
 
+      const resolvedPrice =
+        this.resolveSlotPrice(
+          slot.price,
+          session?.price,
+        );
+
       const value = {
         _id:
           slot._id.toString(),
@@ -1461,6 +2549,16 @@ try {
 
         isActive:
           slot.isActive,
+
+        price:
+          resolvedPrice,
+
+        isPaid:
+          resolvedPrice > 0,
+
+        hasCustomPrice:
+          slot.price !== null &&
+          slot.price !== undefined,
       };
 
       const existing =
@@ -1585,6 +2683,18 @@ try {
           )
         : 1;
 
+    /*
+     * Admin can set an explicit price for this
+     * exact slot. Omitted => inherits the
+     * session type's default price.
+     */
+    const slotPrice:
+      number | null =
+      typeof dto.price ===
+      'number'
+        ? dto.price
+        : null;
+
     try {
       const slot =
         await this.slotModel.create(
@@ -1609,8 +2719,80 @@ try {
 
             isActive:
               true,
+
+            price:
+              slotPrice,
           },
         );
+
+      /*
+       * Webinar slots: create the Zoom meeting
+       * right away instead of waiting for the
+       * first booking. Every attendee who books
+       * this slot later reuses the same link
+       * straight from the DB.
+       *
+       * Best-effort only — a Zoom hiccup here
+       * must not block slot creation. If it
+       * fails, zoomStatus is left as 'failed'
+       * and ensureZoomMeetingForSlot() will
+       * transparently retry the moment someone
+       * actually books this slot.
+       */
+      if (
+        bookingMode ===
+        'webinar'
+      ) {
+        try {
+          await this.ensureZoomMeetingForSlot(
+            slot,
+            session.duration,
+            settings.timezone,
+          );
+        } catch (
+          zoomError
+        ) {
+          this.logger.warn(
+            `Zoom meeting could not be pre-created for slot ${slot._id.toString()}. It will be retried on first booking. Reason: ${
+              zoomError instanceof
+              Error
+                ? zoomError.message
+                : 'Unknown error'
+            }`,
+          );
+        }
+      }
+
+      /*
+       * Re-fetch so the response (and admin
+       * calendar) reflect the just-created
+       * Zoom fields, not the stale in-memory
+       * copy from before ensureZoomMeetingForSlot
+       * mutated the DB.
+       */
+      const freshSlot =
+        (await this.slotModel
+          .findById(
+            slot._id,
+          )
+          .exec()) ||
+        slot;
+
+      /*
+       * Announce the new session to every
+       * registered user — in-app notification
+       * for all, email for those who haven't
+       * opted out. Best-effort: announcement
+       * problems must never fail slot creation.
+       */
+      void this.announceNewSession({
+        sessionType: session.title,
+        bookingDate: slot.bookingDate,
+        timeSlot: slot.timeSlot,
+        timezone: settings.timezone,
+        seats: capacity,
+        price: slotPrice,
+      });
 
       return {
         success: true,
@@ -1620,8 +2802,9 @@ try {
 
         data:
           this.serializeAdminSlot(
-            slot,
+            freshSlot,
             session.duration,
+            session.price,
           ),
       };
     } catch (error) {
@@ -1637,6 +2820,179 @@ try {
 
       throw error;
     }
+  }
+
+  /*
+   * Fan-out for a newly published session: one
+   * in-app notification per user, plus an email
+   * to everyone who hasn't opted out.
+   *
+   * Intentionally swallows its own errors — the
+   * caller fires this without awaiting, so an
+   * unhandled rejection here would crash the
+   * process rather than surface anywhere useful.
+   */
+  private async announceNewSession(input: {
+    sessionType: string;
+    bookingDate: string;
+    timeSlot: string;
+    timezone: string;
+    seats: number;
+    price: number;
+  }) {
+    try {
+      const formattedDate =
+        this.formatAnnouncementDate(
+          input.bookingDate,
+        );
+
+      await this.usersService.notifyAllUsers({
+        type: 'new_session',
+
+        title: `New ${input.sessionType} on ${formattedDate}`,
+
+        body: `${input.timeSlot} (${input.timezone}) · ${
+          input.seats
+        } seats · ${
+          input.price > 0
+            ? `₹${input.price}`
+            : 'Free'
+        }`,
+
+        link: '/book-session',
+      });
+
+      /*
+       * Everyone captured from any form on the site —
+       * not just registered accounts — so people who
+       * only ever sent an enquiry still hear about it.
+       */
+      const recipients =
+        await this.audienceService.getAnnouncementRecipients();
+
+      const result =
+        await this.userMailService.sendNewSessionAnnouncement(
+          recipients,
+          input,
+        );
+
+      this.logger.log(
+        `New-session announcement: ${result.sent} sent, ${result.failed} failed.`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not announce the new session. Reason: ${
+          error instanceof Error
+            ? error.message
+            : 'Unknown error'
+        }`,
+      );
+    }
+  }
+
+  private formatAnnouncementDate(value: string) {
+    const [year, month, day] = value
+      .split('-')
+      .map(Number);
+
+    const date = new Date(
+      Date.UTC(year, month - 1, day),
+    );
+
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    return new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(date);
+  }
+
+  /*
+   * Manually (re)create the Zoom meeting for a
+   * webinar slot — covers slots created before
+   * eager creation existed, and gives the admin
+   * a retry button instead of waiting for the
+   * first booking to trigger it.
+   */
+  async createZoomForSlot(
+    id: string,
+  ) {
+    if (
+      !Types.ObjectId.isValid(
+        id,
+      )
+    ) {
+      throw new NotFoundException(
+        'Slot not found.',
+      );
+    }
+
+    const slot =
+      await this.slotModel
+        .findById(id)
+        .exec();
+
+    if (!slot) {
+      throw new NotFoundException(
+        'Slot not found.',
+      );
+    }
+
+    if (
+      slot.bookingMode !==
+      'webinar'
+    ) {
+      throw new BadRequestException(
+        'Zoom links are only pre-created for webinar slots — individual sessions get one when the booking is confirmed.',
+      );
+    }
+
+    const settings =
+      await this.getOrCreateSettings();
+
+    const session =
+      this.findActiveSession(
+        settings,
+        slot.sessionType,
+      );
+
+    if (
+      slot.zoomStatus !==
+        'scheduled' ||
+      !slot.zoomJoinUrl
+    ) {
+      await this.ensureZoomMeetingForSlot(
+        slot,
+        session.duration,
+        settings.timezone,
+      );
+    }
+
+    const freshSlot =
+      (await this.slotModel
+        .findById(id)
+        .exec()) || slot;
+
+    return {
+      success: true,
+
+      message:
+        freshSlot.zoomStatus ===
+        'scheduled'
+          ? 'Zoom meeting is ready.'
+          : 'Zoom meeting could not be created. Please try again.',
+
+      data:
+        this.serializeAdminSlot(
+          freshSlot,
+          session.duration,
+          session.price,
+        ),
+    };
   }
 
   /* =======================================================
@@ -1820,6 +3176,19 @@ try {
         dto.isActive;
     }
 
+    /*
+     * Admin explicitly changed this slot's
+     * price (paid amount, or 0 for free).
+     * Leave untouched when omitted.
+     */
+    if (
+      typeof dto.price ===
+      'number'
+    ) {
+      slot.price =
+        dto.price;
+    }
+
     try {
       await slot.save();
 
@@ -1833,6 +3202,7 @@ try {
           this.serializeAdminSlot(
             slot,
             targetSession.duration,
+            targetSession.price,
           ),
       };
     } catch (error) {
@@ -2056,6 +3426,7 @@ try {
           | 'individual'
           | 'webinar';
         defaultCapacity: number;
+        price: number;
         isActive: boolean;
       }
     >();
@@ -2125,6 +3496,16 @@ try {
           : 1;
     }
 
+    let price =
+      Number(session.price || 0);
+
+    if (
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
+      price = 0;
+    }
+
     uniqueSessions.set(
       key,
       {
@@ -2140,6 +3521,8 @@ try {
         bookingMode,
 
         defaultCapacity,
+
+        price,
 
         isActive:
           session.isActive !==
@@ -2170,6 +3553,8 @@ try {
 
         defaultCapacity:
           100,
+
+        price: 0,
 
         isActive:
           true,
@@ -2204,6 +3589,9 @@ try {
       defaultCapacity:
         session.defaultCapacity ||
         1,
+
+      price:
+        session.price || 0,
 
       isActive:
         session.isActive !==
@@ -2268,12 +3656,48 @@ try {
      SESSION HELPERS
   ======================================================= */
 
+  /*
+   * PRICE RESOLUTION
+   *
+   * A slot's own `price` (set by admin when
+   * creating/editing that specific slot) always
+   * wins. If the slot has no override, we fall
+   * back to the parent session type's price.
+   *
+   * This is what lets admin mark one specific
+   * slot as paid/free independently, while every
+   * other slot of the same session type keeps
+   * using the session's default price.
+   */
+  private resolveSlotPrice(
+    slotPrice:
+      number | null | undefined,
+    sessionPrice:
+      number | null | undefined,
+  ): number {
+    const effective =
+      slotPrice === null ||
+      slotPrice === undefined
+        ? Number(
+            sessionPrice || 0,
+          )
+        : Number(slotPrice);
+
+    if (
+      !Number.isFinite(effective) ||
+      effective < 0
+    ) {
+      return 0;
+    }
+
+    return effective;
+  }
+
   private findActiveSession(
     settings:
       BookingSettingsDocument,
     title: string,
-  ) {
-    const normalized =
+  ) {    const normalized =
       title
         .trim()
         .toLowerCase();
@@ -3092,7 +4516,15 @@ private parseSessionDuration(
       BookingSlotDocument,
     duration:
       string,
+    sessionPrice?:
+      number,
   ) {
+    const price =
+      this.resolveSlotPrice(
+        slot.price,
+        sessionPrice,
+      );
+
     return {
       _id:
         slot._id.toString(),
@@ -3125,6 +4557,45 @@ private parseSessionDuration(
 
       isActive:
         slot.isActive,
+
+      /*
+       * Effective price for this exact slot
+       * (own override, else session default).
+       */
+      price,
+
+      isPaid:
+        price > 0,
+
+      /*
+       * Whether this slot has its own price
+       * override, or is just inheriting the
+       * session type's default price.
+       */
+      hasCustomPrice:
+        slot.price !== null &&
+        slot.price !== undefined,
+
+      /*
+       * Zoom meeting for this slot — same
+       * link every attendee who books it
+       * will receive. 'not_created' until
+       * the first webinar booking (or the
+       * eager pre-creation for webinars)
+       * schedules it.
+       */
+      zoomStatus:
+        slot.zoomStatus ||
+        'not_created',
+
+      zoomJoinUrl:
+        slot.zoomJoinUrl,
+
+      zoomMeetingId:
+        slot.zoomMeetingId,
+
+      zoomLastError:
+        slot.zoomLastError,
     };
   }
 

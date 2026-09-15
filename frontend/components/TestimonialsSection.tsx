@@ -1,8 +1,14 @@
 import { Reveal } from "@/components/Reveal";
-import { testimonials } from "@/lib/home-data";
+import type { ApiTestimonial } from "@/lib/site-content-api";
 import Link from "next/link";
 
-export function TestimonialsSection() {
+export function TestimonialsSection({
+  testimonials,
+}: {
+  testimonials: ApiTestimonial[];
+}) {
+  const featured = testimonials.slice(0, 3);
+
   return (
     <section className="relative overflow-hidden bg-[#f4ede2] px-[max(6vw,40px)] py-[72px] max-[700px]:px-6 max-[700px]:py-14">
       <div className="mx-auto max-w-[1180px]">
@@ -17,8 +23,8 @@ export function TestimonialsSection() {
         {/* CARDS */}
         <div className="grid grid-cols-4 gap-[18px] max-[1050px]:grid-cols-2 max-[600px]:grid-cols-1">
 
-          {testimonials.slice(0, 3).map(([name, type, quote]) => (
-            <Reveal key={name}>
+          {featured.map(({ _id, name, type, quote }) => (
+            <Reveal key={_id}>
               <article className="group flex min-h-[190px] flex-col justify-between rounded-[15px] border border-[#e3d7c6] bg-[#fffaf3] px-[21px] py-[19px] shadow-[0_5px_20px_rgba(94,70,40,0.04)] transition-all duration-300 hover:-translate-y-[3px] hover:shadow-[0_12px_30px_rgba(94,70,40,0.09)]">
 
                 {/* QUOTE */}

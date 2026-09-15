@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Reveal } from "@/components/Reveal";
-import { videos } from "@/lib/home-data";
+import type { ApiVideo } from "@/lib/site-content-api";
 import { heading, sectionPad, textLink } from "@/lib/home-styles";
 
 function VideoCard({
@@ -116,11 +116,13 @@ function VideoModal({
   );
 }
 
-export function VideosSection() {
+export function VideosSection({ videos }: { videos: ApiVideo[] }) {
   const [selectedVideo, setSelectedVideo] = useState<{
     title: string;
     video: string;
   } | null>(null);
+
+  const featured = videos.slice(0, 4);
 
   return (
     <section className={`bg-[#faf6ee] ${sectionPad}`}>
@@ -160,12 +162,12 @@ export function VideosSection() {
 
           {/* ONLY 2 VIDEOS */}
 <div className="grid grid-cols-4 gap-[24px] max-[900px]:grid-cols-2 max-[550px]:grid-cols-1">
-  {videos.map((video) => (
+  {featured.map((video) => (
     <VideoCard
-      key={video.title}
+      key={video._id}
       title={video.title}
-      video={video.video}
-      onOpen={() => setSelectedVideo(video)}
+      video={video.url}
+      onOpen={() => setSelectedVideo({ title: video.title, video: video.url })}
     />
   ))}
 </div>

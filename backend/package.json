@@ -7,7 +7,8 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
-    "seed:admin": "nest start --entryFile database/seeders/admin.seeder"
+    "seed:admin": "nest start --entryFile database/seeders/admin.seeder",
+    "seed:content": "nest start --entryFile database/seeders/content.seeder"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
@@ -18,12 +19,14 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "mongoose": "^8.4.0",
+    "multer": "^2.0.2",
     "nodemailer": "^10.0.0",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.3.0",
+    "@types/multer": "^1.4.11",
     "@types/nodemailer": "^8.0.1",
     "typescript": "^5.4.5"
   }

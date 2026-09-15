@@ -27,6 +27,8 @@ import {
   EnquiryDocument,
 } from './schemas/enquiry.schema';
 
+import { AudienceService } from '../users/audience.service';
+
 @Injectable()
 export class EnquiriesService {
   constructor(
@@ -35,6 +37,9 @@ export class EnquiriesService {
     )
     private readonly enquiryModel:
       Model<EnquiryDocument>,
+
+    private readonly audienceService:
+      AudienceService,
   ) {}
 
   async create(
@@ -64,6 +69,18 @@ export class EnquiriesService {
               'new',
           },
         );
+
+      /*
+       * Anyone who contacts us joins the shared
+       * announcement list, so they hear about new
+       * sessions even without an account.
+       */
+      await this.audienceService.capture({
+        email: dto.email,
+        name: dto.name,
+        phone: dto.phone,
+        source: 'enquiry',
+      });
 
       return {
         success: true,
@@ -100,6 +117,15 @@ export class EnquiriesService {
       success: true,
       data: enquiries,
     };
+  }
+
+  async countStats() {
+    const [total, newCount] = await Promise.all([
+      this.enquiryModel.countDocuments().exec(),
+      this.enquiryModel.countDocuments({ status: 'new' }).exec(),
+    ]);
+
+    return { total, new: newCount };
   }
 
   async updateStatus(

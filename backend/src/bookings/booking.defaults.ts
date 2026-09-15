@@ -6,6 +6,7 @@ export const DEFAULT_BOOKING_SETTINGS = {
     duration: '20 minutes',
     bookingMode: 'individual',
     defaultCapacity: 1,
+    price: 0,
     isActive: true,
   },
 
@@ -14,6 +15,7 @@ export const DEFAULT_BOOKING_SETTINGS = {
     duration: '60 minutes',
     bookingMode: 'individual',
     defaultCapacity: 1,
+    price: 2500,
     isActive: true,
   },
 
@@ -22,6 +24,7 @@ export const DEFAULT_BOOKING_SETTINGS = {
     duration: '90 minutes',
     bookingMode: 'individual',
     defaultCapacity: 1,
+    price: 4500,
     isActive: true,
   },
 
@@ -30,6 +33,7 @@ export const DEFAULT_BOOKING_SETTINGS = {
     duration: '60 minutes',
     bookingMode: 'webinar',
     defaultCapacity: 100,
+    price: 499,
     isActive: true,
   },
 ],

@@ -1,30 +1,101 @@
 import Link from "next/link";
+import { NewsletterSignup } from "./NewsletterSignup";
+
+/* ---------- Inline brand icon components ---------- */
+function InstagramIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+    </svg>
+  );
+}
+
+function LinkedinIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
+      <rect x="2" y="9" width="4" height="12" />
+      <circle cx="4" cy="4" r="2" />
+    </svg>
+  );
+}
+
+function YoutubeIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-1.92 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33z" />
+      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
+    </svg>
+  );
+}
+
 export function SiteFooter() {
+  const socials = [
+    { name: "Instagram", href: "#", Icon: InstagramIcon },
+    { name: "LinkedIn", href: "#", Icon: LinkedinIcon },
+    { name: "YouTube", href: "#", Icon: YoutubeIcon },
+  ];
+
   return (
     <footer className="relative overflow-hidden bg-[#062f2d] text-[#c4d0c8]">
       {/* Ambient premium glow */}
-      <div className="pointer-events-none absolute -left-32 -top-32 h-[420px] w-[420px] rounded-full bg-[#b27a39]/[0.06] blur-[100px]" />
-      <div className="pointer-events-none absolute -bottom-40 right-0 h-[420px] w-[420px] rounded-full bg-[#b27a39]/[0.05] blur-[100px]" />
+      <div className="pointer-events-none absolute -left-32 -top-32 h-[280px] w-[280px] rounded-full bg-[#b27a39]/[0.06] blur-[100px] sm:h-[360px] sm:w-[360px] md:h-[420px] md:w-[420px]" />
+      <div className="pointer-events-none absolute -bottom-40 right-0 h-[280px] w-[280px] rounded-full bg-[#b27a39]/[0.05] blur-[100px] sm:h-[360px] sm:w-[360px] md:h-[420px] md:w-[420px]" />
 
-      <div className="relative mx-auto max-w-[1400px] px-[5vw] pb-8 pt-[80px]">
-        {/* Main footer */}
-        <div className="grid grid-cols-[1.65fr_1fr_1fr_1.45fr] gap-12 border-b border-white/[0.10] pb-16 max-[1000px]:grid-cols-2 max-[700px]:gap-10 max-[700px]:pt-[60px]">
-
+      <div className="relative mx-auto max-w-[1400px] px-5 pb-8 sm:px-8 sm:pt-16 md:px-[5vw] md:pb-8 md:pt-[10px]">
+        {/* Main footer grid */}
+        <div
+          className="
+            grid grid-cols-1 gap-10
+            border-b border-white/[0.10] pb-12
+            sm:grid-cols-2 sm:gap-10 sm:pb-14
+            lg:grid-cols-[1.65fr_1fr_1fr_1.45fr] lg:gap-12 lg:pb-16
+          "
+        >
           {/* Brand */}
-          <div className="pr-10 max-[1000px]:pr-0">
+          <div className="sm:col-span-2 lg:col-span-1 lg:pr-10">
             <Link
-  href="/"
-  aria-label="NeusomaHealing Practice home"
-  className="inline-flex items-center"
->
-  <img
-    src="/no_bg_neusomalogo_1.png"
-    alt="NeusomaHealing Practice — Heal. Regulate. Transform."
-    className="h-auto w-[150px] object-contain max-[700px]:w-[120px]"
-  />
-</Link>
+              href="/"
+              aria-label="NeusomaHealing Practice home"
+              className="inline-flex items-center"
+            >
+              <img
+                src="/logo_w.png"
+                alt="NeusomaHealing Practice — Heal. Regulate. Transform."
+                className="h-auto w-[130px] object-contain sm:w-[140px] lg:w-[150px]"
+              />
+            </Link>
 
-            <p className="mt-7 max-w-[350px] text-[14px] leading-[1.9] text-[#9eb1aa]">
+            <p className="mt-6 max-w-[420px] text-[13px] leading-[1.9] text-[#9eb1aa] sm:mt-7 sm:text-[14px]">
               A nervous-system informed approach to healing, regulation and
               meaningful transformation — helping you reconnect with yourself
               from the inside out.
@@ -39,13 +110,22 @@ export function SiteFooter() {
 
             {/* Socials */}
             <div className="mt-7 flex items-center gap-3">
-              {["IG", "LI", "YT"].map((item) => (
+              {socials.map(({ name, href, Icon }) => (
                 <a
-                  key={item}
-                  href="#"
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[#b27a39]/30 text-[9px] font-medium tracking-[0.08em] text-[#d3a15f] transition-all duration-300 hover:border-[#b27a39] hover:bg-[#b27a39] hover:text-white"
+                  key={name}
+                  href={href}
+                  aria-label={name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="
+                    group flex h-10 w-10 items-center justify-center rounded-full
+                    border border-[#b27a39]/30 text-[#d3a15f]
+                    transition-all duration-300
+                    hover:border-[#b27a39] hover:bg-[#b27a39] hover:text-white
+                    hover:-translate-y-0.5 hover:shadow-[0_6px_18px_-6px_rgba(178,122,57,0.55)]
+                  "
                 >
-                  {item}
+                  <Icon className="h-[17px] w-[17px] transition-transform duration-300 group-hover:scale-110" />
                 </a>
               ))}
             </div>
@@ -53,12 +133,12 @@ export function SiteFooter() {
 
           {/* Explore */}
           <div>
-            <h4 className="mb-6 flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.22em] text-white">
+            <h4 className="mb-5 flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.22em] text-white sm:mb-6">
               <span className="h-px w-5 bg-[#b27a39]" />
               Explore
             </h4>
 
-            <nav className="space-y-3.5">
+            <nav className="space-y-3 sm:space-y-3.5">
               {[
                 ["About", "/about"],
                 ["H.R.T. Framework", "/hrt-framework"],
@@ -79,12 +159,12 @@ export function SiteFooter() {
 
           {/* Resources */}
           <div>
-            <h4 className="mb-6 flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.22em] text-white">
+            <h4 className="mb-5 flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.22em] text-white sm:mb-6">
               <span className="h-px w-5 bg-[#b27a39]" />
               Resources
             </h4>
 
-            <nav className="space-y-3.5">
+            <nav className="space-y-3 sm:space-y-3.5">
               {[
                 ["Insights", "/insights"],
                 ["Testimonials", "/testimonials"],
@@ -104,73 +184,41 @@ export function SiteFooter() {
           </div>
 
           {/* Newsletter */}
-          <div>
-            <h4 className="mb-6 flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.22em] text-white">
+          <div className="sm:col-span-2 lg:col-span-1">
+            <h4 className="mb-5 flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.22em] text-white sm:mb-6">
               <span className="h-px w-5 bg-[#b27a39]" />
               Stay Connected
             </h4>
 
-            <p className="max-w-[320px] text-[12px] leading-[1.8] text-[#9eb1aa]">
+            <p className="max-w-[420px] text-[12px] leading-[1.8] text-[#9eb1aa] sm:max-w-[320px]">
               Receive thoughtful insights, nervous-system education, videos
               and resources for your healing journey.
             </p>
 
-            {/* Newsletter box */}
-            <div className="mt-6 rounded-[18px] border border-white/[0.10] bg-white/[0.035] p-2 backdrop-blur-sm">
-              <div className="flex items-center">
-                <input
-                  type="email"
-                  placeholder="Your email address"
-                  className="min-w-0 flex-1 bg-transparent px-4 py-3 text-[11px] text-white outline-none placeholder:text-[#7f9690]"
-                />
-
-                <button
-                  type="button"
-                  aria-label="Subscribe"
-                  className="group flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-[#b27a39] text-white shadow-[0_8px_25px_rgba(178,122,57,0.18)] transition-all duration-300 hover:bg-[#c48b48] hover:shadow-[0_10px_30px_rgba(178,122,57,0.3)]"
-                >
-                  <span className="text-lg transition-transform duration-300 group-hover:translate-x-0.5">
-                    →
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <p className="mt-3 px-1 text-[9px] leading-relaxed text-[#718781]">
-              No noise. Just meaningful resources. Unsubscribe anytime.
-            </p>
+            <NewsletterSignup />
           </div>
         </div>
 
         {/* Bottom bar */}
-        <div className="flex items-center justify-between pt-6 text-[9px] tracking-[0.02em] text-[#718781] max-[700px]:flex-col max-[700px]:items-start max-[700px]:gap-4">
-          <span>
-            © 2026 NeusomaHealing Practice. All rights reserved.
-          </span>
+        <div
+          className="
+            flex flex-col items-start gap-4 pt-6
+            text-[9px] tracking-[0.02em] text-[#718781]
+            sm:flex-row sm:items-center sm:justify-between sm:gap-0
+          "
+        >
+          <span>© 2026 NeusomaHealing Practice. All rights reserved.</span>
 
-          <div className="flex items-center gap-5 max-[700px]:gap-4">
-            <Link
-              href="/privacy"
-              className="transition-colors hover:text-[#b27a39]"
-            >
+          <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+            <Link href="/privacy" className="transition-colors hover:text-[#b27a39]">
               Privacy
             </Link>
-
             <span className="h-3 w-px bg-[#49635d]" />
-
-            <Link
-              href="/terms"
-              className="transition-colors hover:text-[#b27a39]"
-            >
+            <Link href="/terms" className="transition-colors hover:text-[#b27a39]">
               Terms
             </Link>
-
             <span className="h-3 w-px bg-[#49635d]" />
-
-            <Link
-              href="/disclaimer"
-              className="transition-colors hover:text-[#b27a39]"
-            >
+            <Link href="/disclaimer" className="transition-colors hover:text-[#b27a39]">
               Disclaimer
             </Link>
           </div>

@@ -11,6 +11,10 @@ import {
 } from '../auth/auth.module';
 
 import {
+  UsersModule,
+} from '../users/users.module';
+
+import {
   EnquiriesController,
 } from './enquiries.controller';
 
@@ -36,6 +40,7 @@ import {
     ]),
 
     AuthModule,
+    UsersModule,
   ],
 
   controllers: [
@@ -43,6 +48,10 @@ import {
   ],
 
   providers: [
+    EnquiriesService,
+  ],
+
+  exports: [
     EnquiriesService,
   ],
 })

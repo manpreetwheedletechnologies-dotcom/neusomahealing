@@ -26,6 +26,9 @@ export class Post {
   @Prop({ default: 'Sakshi Kashyap' })
   author: string;
 
+  @Prop()
+  readTime?: string;
+
   @Prop({ default: false })
   published: boolean;
 }

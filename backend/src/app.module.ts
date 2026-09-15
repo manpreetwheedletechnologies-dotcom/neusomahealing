@@ -8,6 +8,14 @@ import { VideosModule } from './videos/videos.module';
 import { BlogModule } from './blog/blog.module';
 import { AuthModule } from './auth/auth.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { CoachingModule } from './coaching/coaching.module';
+import { TestimonialsModule } from './testimonials/testimonials.module';
+import { SubscribersModule } from './subscribers/subscribers.module';
+import { ContentModule } from './content/content.module';
+import { DashboardModule } from './admin/dashboard.module';
+import { ChatModule } from './chat/chat.module';
+import { UploadsModule } from './uploads/uploads.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -46,6 +54,14 @@ import { BookingsModule } from './bookings/bookings.module';
     BlogModule,
     AuthModule,
     BookingsModule,
+    CoachingModule,
+    TestimonialsModule,
+    SubscribersModule,
+    ContentModule,
+    DashboardModule,
+    ChatModule,
+    UploadsModule,
+    UsersModule,
   ],
 })
 export class AppModule {}

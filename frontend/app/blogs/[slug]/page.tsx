@@ -3,44 +3,66 @@ import { Header } from "@/components/Header";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Reveal } from "@/components/Reveal";
 import { PhotoBlock } from "@/components/PhotoBlock";
-import { insights, nervousSystemStates, nervousSystemTopics } from "@/lib/site-data";
+import { getInsightBySlug } from "@/lib/site-content-api";
+import { nervousSystemStates, nervousSystemTopics } from "@/lib/site-data";
 import { buttonDark, eyebrow, sectionPadTop } from "@/lib/ui";
 
-export function generateStaticParams() {
-  return insights.map((a) => ({ slug: a.slug }));
+// Content is DB-driven and can change without a rebuild.
+export const dynamic = "force-dynamic";
+
+function formatDate(value?: string) {
+  if (!value) return "";
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const article = insights.find((a) => a.slug === slug);
+  const article = await getInsightBySlug(slug);
   return { title: article ? `${article.title} — NeusomaHealing Practice` : "Insights" };
 }
 
 export default async function InsightDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const article = insights.find((a) => a.slug === slug);
+  const article = await getInsightBySlug(slug);
   if (!article) notFound();
 
+  // Some articles get a richer, structured layout — keyed by slug so
+  // admin can opt an article into it just by using this exact slug.
   const isNervousSystem = article.slug === "the-nervous-system-and-emotional-overwhelm";
+
+  const contentParagraphs = article.content
+    .split(/\n{1,2}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
 
   return (
     <main className="bg-paper font-sans text-ink">
-      <Header />
 
       {/* HERO */}
       <section className={`grid grid-cols-[1fr_1fr] items-center gap-[50px] bg-cream ${sectionPadTop} max-[900px]:grid-cols-1 max-[900px]:gap-8`}>
         <Reveal>
           <p className={eyebrow}>{article.category.toUpperCase()}</p>
           <h1 className="m-0 mb-4 font-serif text-[clamp(34px,4vw,52px)] font-medium leading-[1.05]">{article.title}</h1>
-          <p className="max-w-[420px] text-sm text-muted">
-            {isNervousSystem ? "Awareness is the first step toward regulation." : article.excerpt}
-          </p>
+          <p className="max-w-[420px] text-sm text-muted">{article.excerpt}</p>
           <p className="mt-4 text-[11px] text-[#8e775c]">
-            {article.date} · {article.readTime}
+            {formatDate(article.createdAt)}
+            {article.readTime ? ` · ${article.readTime}` : ""}
           </p>
         </Reveal>
         <Reveal>
-          <PhotoBlock tone="deep" className="h-[300px] w-full rounded-[28px]" icon="✳" />
+          {article.featuredImage ? (
+            <div className="relative h-[300px] w-full overflow-hidden rounded-[28px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={article.featuredImage} alt={article.title} className="h-full w-full object-cover" />
+            </div>
+          ) : (
+            <PhotoBlock tone="deep" className="h-[300px] w-full rounded-[28px]" icon="✳" />
+          )}
         </Reveal>
       </section>
 
@@ -97,16 +119,11 @@ export default async function InsightDetailPage({ params }: { params: Promise<{ 
       ) : (
         <section className="mx-auto max-w-[720px] px-[max(5vw,32px)] py-[60px] text-sm leading-[1.9] text-[#3f4a45]">
           <Reveal>
-            <p className="mb-5">{article.excerpt}</p>
-            <p className="mb-5">
-              Patterns like these rarely appear out of nowhere. They tend to form as intelligent responses to real experiences — ways of staying safe, staying connected, or staying in control when things once felt uncertain.
-            </p>
-            <p className="mb-5">
-              The work is not to fight the pattern, but to understand it: what it protected you from, what it may be costing you now, and what a new, more conscious response could look like.
-            </p>
-            <p>
-              If this resonates, you don&apos;t have to navigate it alone. Coaching offers a compassionate, structured space to explore what&apos;s underneath and build new ways forward.
-            </p>
+            {contentParagraphs.map((paragraph, i) => (
+              <p className="mb-5" key={i}>
+                {paragraph}
+              </p>
+            ))}
           </Reveal>
           <Reveal className="mt-10">
             <a className={buttonDark} href="/book-session">
@@ -116,7 +133,6 @@ export default async function InsightDetailPage({ params }: { params: Promise<{ 
         </section>
       )}
 
-      <SiteFooter />
     </main>
   );
 }

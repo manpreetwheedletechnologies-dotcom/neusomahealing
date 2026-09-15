@@ -1,0 +1,422 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+
+import { CoachingService } from '../coaching/coaching.service';
+import { BlogService } from '../blog/blog.service';
+import { VideosService } from '../videos/videos.service';
+import { TestimonialsService } from '../testimonials/testimonials.service';
+
+import { SendChatMessageDto } from './dto/send-chat-message.dto';
+import { ChatConversationStatus } from './dto/update-chat-status.dto';
+import {
+  ChatConversation,
+  ChatConversationDocument,
+  ChatMessage,
+} from './schemas/chat.schema';
+
+/*
+ * No third-party AI API here — every reply is built directly
+ * from content that already lives in this database (Coaching
+ * programs, Insights, Videos, Testimonials) plus a small set of
+ * static facts about the practice (About, contact details,
+ * session types). Simple keyword matching decides which piece
+ * of real content to surface for a given message. Anything that
+ * doesn't match a known intent falls through to a cross-content
+ * search so the bot can still answer with something real instead
+ * of a generic "I don't know".
+ */
+
+const CONTACT_INFO = {
+  email: 'hello@neusomahealing.com',
+  phone: '+91 12345 67890',
+  location: 'Online (Worldwide)',
+};
+
+const SESSION_TYPES = [
+  { title: 'Discovery Call', duration: '20 minutes' },
+  { title: '1:1 Coaching Session', duration: '60 minutes' },
+  { title: 'Deep Transformation Session', duration: '90 minutes' },
+];
+
+const ABOUT_INFO = {
+  name: 'Sakshi Kashyap',
+  title:
+    'Trauma-Informed Neurosomatic Coach & Certified New Code NLP Practitioner (trained through ITCA NLP)',
+  summary:
+    "Sakshi doesn't see people as broken — she sees human beings who found intelligent ways to adapt, protect themselves and cope with experiences that once felt overwhelming. With over 2 years of practice, she's the founder of Neusoma Healing.",
+  approach: [
+    'New Code NLP',
+    'Nervous-System Awareness',
+    'Somatic Practices',
+    'Neuroscience-Informed Methods',
+  ],
+  stats: ['500+ Lives Supported', '800+ Coaching Sessions', '2+ Years of Practice'],
+};
+
+type Intent =
+  | 'greeting'
+  | 'about'
+  | 'coaching'
+  | 'booking'
+  | 'discovery_call'
+  | 'video'
+  | 'insight'
+  | 'testimonial'
+  | 'contact'
+  | 'thanks'
+  | 'fallback';
+
+const INTENT_KEYWORDS: Record<Exclude<Intent, 'fallback'>, string[]> = {
+  greeting: ['hi', 'hello', 'hey', 'namaste', 'good morning', 'good evening'],
+  about: [
+    'about',
+    'who are you',
+    'who is sakshi',
+    'sakshi',
+    'founder',
+    'your story',
+    'background',
+    'qualification',
+    'credential',
+    'experience',
+    'trainer',
+    'coach are you',
+  ],
+  coaching: [
+    'coaching',
+    'program',
+    'course',
+    'transformation',
+    'h.r.t',
+    'hrt',
+    'mid-life',
+    'mid life',
+    'nervous system',
+    'nervous-system',
+  ],
+  booking: [
+    'book',
+    'schedule',
+    'appointment',
+    'slot',
+    'session',
+    'price',
+    'cost',
+    'fee',
+    'pricing',
+  ],
+  discovery_call: ['discovery call', 'free call', 'intro call'],
+  video: ['video', 'watch', 'youtube', 'library'],
+  insight: ['insight', 'article', 'blog', 'read', 'post'],
+  testimonial: [
+    'testimonial',
+    'review',
+    'reviews',
+    'results',
+    'success story',
+    'success stories',
+    'client said',
+    'feedback',
+  ],
+  contact: ['contact', 'email', 'phone', 'reach', 'call you', 'location', 'where are you', 'address'],
+  thanks: ['thank', 'thanks', 'thank you', 'bye', 'goodbye'],
+};
+
+const STOPWORDS = new Set([
+  'the', 'a', 'an', 'is', 'are', 'do', 'does', 'did', 'what', 'how', 'can',
+  'you', 'your', 'about', 'tell', 'me', 'of', 'on', 'in', 'to', 'for', 'and',
+  'i', 'my', 'with', 'this', 'that', 'it', 'be', 'have', 'has', 'or', 'any',
+  'please', 'know', 'like', 'want', 'would', 'could', 'im', 'am',
+]);
+
+function tokenize(message: string): string[] {
+  return message
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
+}
+
+// Checked in this exact order. 'about' is deliberately near the end —
+// its keyword list includes the very generic word "about", which would
+// otherwise hijack phrasings like "tell me about coaching" or "what
+// about pricing" before the more specific intent gets a chance.
+const INTENT_PRIORITY: Exclude<Intent, 'fallback'>[] = [
+  'greeting',
+  'discovery_call',
+  'coaching',
+  'booking',
+  'video',
+  'insight',
+  'testimonial',
+  'contact',
+  'thanks',
+  'about',
+];
+
+function detectIntent(message: string): Intent {
+  const text = message.toLowerCase();
+
+  for (const intent of INTENT_PRIORITY) {
+    if (INTENT_KEYWORDS[intent].some((keyword) => text.includes(keyword))) {
+      return intent;
+    }
+  }
+
+  return 'fallback';
+}
+
+@Injectable()
+export class ChatService {
+  constructor(
+    @InjectModel(ChatConversation.name)
+    private readonly chatModel: Model<ChatConversationDocument>,
+    private readonly coachingService: CoachingService,
+    private readonly blogService: BlogService,
+    private readonly videosService: VideosService,
+    private readonly testimonialsService: TestimonialsService,
+  ) {}
+
+  async sendMessage(dto: SendChatMessageDto) {
+    let conversation = await this.chatModel.findOne({
+      sessionId: dto.sessionId,
+    });
+
+    if (!conversation) {
+      conversation = new this.chatModel({
+        sessionId: dto.sessionId,
+        messages: [],
+        status: 'new',
+      });
+    }
+
+    if (dto.name) conversation.name = dto.name;
+    if (dto.email) conversation.email = dto.email;
+
+    conversation.messages.push({
+      role: 'user',
+      text: dto.message,
+      at: new Date(),
+    } as ChatMessage);
+
+    // A fresh visitor message always needs a fresh look, even if
+    // admin had marked this conversation read earlier.
+    conversation.status = 'new';
+
+    const reply = await this.generateReply(dto.message);
+
+    conversation.messages.push({
+      role: 'bot',
+      text: reply,
+      at: new Date(),
+    } as ChatMessage);
+
+    await conversation.save();
+
+    return {
+      success: true,
+      reply,
+      data: {
+        id: conversation._id.toString(),
+        sessionId: conversation.sessionId,
+      },
+    };
+  }
+
+  private async generateReply(message: string): Promise<string> {
+    const intent = detectIntent(message);
+
+    switch (intent) {
+      case 'greeting':
+        return "Hi there! I'm happy to help. Ask me about Sakshi, our coaching programs, booking a session, videos, insights, testimonials, or how to reach us.";
+
+      case 'about':
+        return `${ABOUT_INFO.name} — ${ABOUT_INFO.title}.\n\n${ABOUT_INFO.summary}\n\nHer approach draws on:\n${ABOUT_INFO.approach
+          .map((a) => `• ${a}`)
+          .join('\n')}\n\n${ABOUT_INFO.stats.join(' · ')}\n\nYou can read the full story on the About page.`;
+
+      case 'coaching': {
+        const programs = await this.coachingService.findAll();
+
+        if (programs.length === 0) {
+          return "We offer personalised 1:1 coaching programs. I don't have the list handy right now — please check the Coaching page or book a Discovery Call to learn more.";
+        }
+
+        const list = programs
+          .slice(0, 4)
+          .map((p) => `• ${p.title} — ${p.tagline}`)
+          .join('\n');
+
+        return `Here are our coaching programs:\n${list}\n\nYou can read more about any of these on the Coaching page, or book a session directly.`;
+      }
+
+      case 'discovery_call': {
+        const discovery = SESSION_TYPES.find((s) => s.title === 'Discovery Call');
+
+        return `A Discovery Call is a free, no-obligation ${discovery?.duration || '20-minute'} call to talk through what you're looking for and see if coaching is the right fit. You can request one from the Book a Session page — our team will follow up to confirm a time.`;
+      }
+
+      case 'booking': {
+        const sessions = SESSION_TYPES.map(
+          (s) => `• ${s.title} (${s.duration})`,
+        ).join('\n');
+
+        return `You can book from the "Book a Session" page. Session types:\n${sessions}\n\nFor Coaching and Deep Transformation sessions, you'll share a preferred date/time and our team will confirm the final time by email.`;
+      }
+
+      case 'video': {
+        const videos = await this.videosService.findAll();
+
+        if (videos.length === 0) {
+          return "We're building out our video library right now — check back soon, or head to the Videos page.";
+        }
+
+        const list = videos
+          .slice(0, 4)
+          .map((v) => `• ${v.title} (${v.category})`)
+          .join('\n');
+
+        return `Some videos you might like:\n${list}\n\nYou'll find the full library on the Videos page.`;
+      }
+
+      case 'insight': {
+        const posts = await this.blogService.findAll();
+
+        if (posts.length === 0) {
+          return "We're publishing new articles soon — check back on the Insights page shortly.";
+        }
+
+        const list = posts
+          .slice(0, 4)
+          .map((p) => `• ${p.title}`)
+          .join('\n');
+
+        return `A few articles from our Insights page:\n${list}\n\nYou can read the full pieces on the Insights page.`;
+      }
+
+      case 'testimonial': {
+        const testimonials = await this.testimonialsService.findAll();
+
+        if (testimonials.length === 0) {
+          return "We're adding client stories soon — check back on the site shortly.";
+        }
+
+        const list = testimonials
+          .slice(0, 3)
+          .map((t) => `• "${t.quote}" — ${t.name}, ${t.type}`)
+          .join('\n');
+
+        return `Here's what a few clients have shared:\n${list}\n\nMore stories are on the Testimonials section of the homepage.`;
+      }
+
+      case 'contact':
+        return `You can reach us at ${CONTACT_INFO.email} or ${CONTACT_INFO.phone}. All sessions are held online (${CONTACT_INFO.location}), so you can join from anywhere.`;
+
+      case 'thanks':
+        return "You're very welcome! Feel free to reach out any time, or book a Discovery Call if you'd like to talk further.";
+
+      default:
+        return this.searchAllContent(message);
+    }
+  }
+
+  /*
+   * Last resort before the generic fallback: scan every piece of
+   * real content on the site (coaching programs, insights, videos,
+   * testimonials) for a keyword overlap with the message, so an
+   * unrecognised phrasing can still surface something real instead
+   * of "I don't know".
+   */
+  private async searchAllContent(message: string): Promise<string> {
+    const tokens = tokenize(message);
+
+    if (tokens.length === 0) {
+      return this.genericFallback();
+    }
+
+    const matchesToken = (haystack: string) => {
+      const lower = haystack.toLowerCase();
+      return tokens.some((token) => lower.includes(token));
+    };
+
+    const [programs, posts, videos, testimonials] = await Promise.all([
+      this.coachingService.findAll(),
+      this.blogService.findAll(),
+      this.videosService.findAll(),
+      this.testimonialsService.findAll(),
+    ]);
+
+    const matchedProgram = programs.find((p) =>
+      matchesToken(`${p.title} ${p.tagline} ${p.description}`),
+    );
+    if (matchedProgram) {
+      return `That sounds related to our "${matchedProgram.title}" program — ${matchedProgram.tagline}\n\n${matchedProgram.description}\n\nYou can read the full details on the Coaching page, or book a session to get started.`;
+    }
+
+    const matchedPost = posts.find((p) => matchesToken(`${p.title} ${p.excerpt} ${p.category}`));
+    if (matchedPost) {
+      return `You might find this article helpful: "${matchedPost.title}" — ${matchedPost.excerpt}\n\nYou can read the full piece on the Insights page.`;
+    }
+
+    const matchedVideo = videos.find((v) => matchesToken(`${v.title} ${v.category}`));
+    if (matchedVideo) {
+      return `We have a video on this: "${matchedVideo.title}" (${matchedVideo.category}). You'll find it on the Videos page.`;
+    }
+
+    const matchedTestimonial = testimonials.find((t) =>
+      matchesToken(`${t.quote} ${t.type} ${t.category}`),
+    );
+    if (matchedTestimonial) {
+      return `A client shared something similar: "${matchedTestimonial.quote}" — ${matchedTestimonial.name}, ${matchedTestimonial.type}.`;
+    }
+
+    return this.genericFallback();
+  }
+
+  private genericFallback(): string {
+    return "I couldn't find anything specific on that, but I can help with: Sakshi & her background (About), coaching programs, booking a session, videos, insights/articles, client testimonials, or how to reach us — what would you like to know?";
+  }
+
+  async findAll() {
+    return this.chatModel
+      .find()
+      .sort({ updatedAt: -1 })
+      .lean()
+      .exec();
+  }
+
+  async countStats() {
+    const [total, newCount] = await Promise.all([
+      this.chatModel.countDocuments().exec(),
+      this.chatModel.countDocuments({ status: 'new' }).exec(),
+    ]);
+
+    return { total, new: newCount };
+  }
+
+  async updateStatus(id: string, status: ChatConversationStatus) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid conversation id.');
+    }
+
+    const updated = await this.chatModel
+      .findByIdAndUpdate(id, { status }, { new: true, runValidators: true })
+      .lean()
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException('Conversation not found.');
+    }
+
+    return {
+      success: true,
+      message: 'Conversation status updated successfully.',
+      data: updated,
+    };
+  }
+}

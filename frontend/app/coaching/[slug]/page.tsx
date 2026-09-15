@@ -4,28 +4,33 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Reveal } from "@/components/Reveal";
 import { PhotoBlock } from "@/components/PhotoBlock";
 import { VideoThumb } from "@/components/VideoThumb";
-import { coachingPrograms } from "@/lib/site-data";
-import { allVideos } from "@/lib/site-data";
+import { TestimonialsSection } from "@/components/TestimonialsSection";
+import { getCoachingProgramBySlug, getPublicVideos, getPublicTestimonials } from "@/lib/site-content-api";
 import { buttonDark, eyebrow, sectionPadTop } from "@/lib/ui";
 
-export function generateStaticParams() {
-  return coachingPrograms.map((p) => ({ slug: p.slug }));
-}
+// Content is DB-driven and can change without a rebuild.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const program = coachingPrograms.find((p) => p.slug === slug);
+  const program = await getCoachingProgramBySlug(slug);
   return { title: program ? `${program.title} — NeusomaHealing Practice` : "Coaching" };
 }
 
 export default async function CoachingDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const program = coachingPrograms.find((p) => p.slug === slug);
+  const [program, videos, testimonials] = await Promise.all([
+    getCoachingProgramBySlug(slug),
+    getPublicVideos(),
+    getPublicTestimonials(),
+  ]);
+
   if (!program) notFound();
+
+  const relatedVideos = videos.slice(0, 3);
 
   return (
     <main className="bg-paper font-sans text-ink">
-      <Header />
 
       {/* HERO */}
       <section className={`grid grid-cols-[1fr_1fr] items-center gap-[60px] bg-cream ${sectionPadTop} max-[900px]:grid-cols-1 max-[900px]:gap-8`}>
@@ -47,7 +52,14 @@ export default async function CoachingDetailPage({ params }: { params: Promise<{
           </a>
         </Reveal>
         <Reveal>
-          <PhotoBlock tone="warm" className="h-[420px] w-full rounded-[28px_28px_28px_120px] max-[900px]:h-[300px]" icon="🪴" />
+          {program.image ? (
+            <div className="relative h-[420px] w-full overflow-hidden rounded-[28px_28px_28px_120px] max-[900px]:h-[300px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={program.image} alt={program.title} className="h-full w-full object-cover" />
+            </div>
+          ) : (
+            <PhotoBlock tone="warm" className="h-[420px] w-full rounded-[28px_28px_28px_120px] max-[900px]:h-[300px]" icon="🪴" />
+          )}
         </Reveal>
       </section>
 
@@ -78,21 +90,25 @@ export default async function CoachingDetailPage({ params }: { params: Promise<{
       </section>
 
       {/* RELATED VIDEOS */}
-      <section className="px-[max(5vw,32px)] py-[70px]">
-        <Reveal>
-          <p className={eyebrow}>WATCH · REFLECT · DISCOVER</p>
-          <h2 className="mb-8 font-serif text-2xl font-medium">Related Videos</h2>
-        </Reveal>
-        <div className="grid grid-cols-3 gap-5 max-[900px]:grid-cols-2 max-[600px]:grid-cols-1">
-          {allVideos.slice(0, 3).map((v) => (
-            <Reveal key={v.title}>
-              <VideoThumb title={v.title} duration={v.duration} category={v.category} />
-            </Reveal>
-          ))}
-        </div>
-      </section>
+      {relatedVideos.length > 0 && (
+        <section className="px-[max(5vw,32px)] py-[70px]">
+          <Reveal>
+            <p className={eyebrow}>WATCH · REFLECT · DISCOVER</p>
+            <h2 className="mb-8 font-serif text-2xl font-medium">Related Videos</h2>
+          </Reveal>
+          <div className="grid grid-cols-3 gap-5 max-[900px]:grid-cols-2 max-[600px]:grid-cols-1">
+            {relatedVideos.map((v) => (
+              <Reveal key={v._id}>
+                <VideoThumb title={v.title} duration={v.duration} category={v.category} thumbnail={v.thumbnail} />
+              </Reveal>
+            ))}
+          </div>
+        </section>
+      )}
 
-      <SiteFooter />
+      {/* TESTIMONIALS */}
+      <TestimonialsSection testimonials={testimonials} />
+
     </main>
   );
 }

@@ -11,11 +11,25 @@ import { TestimonialsSection } from "../components/TestimonialsSection";
 import { FinalCta } from "../components/FinalCta";
 import { SiteFooter } from "../components/SiteFooter";
 import { ScrollReveal } from "../components/ScrollReveal";
+import {
+  getPublicCoachingPrograms,
+  getPublicTestimonials,
+  getPublicVideos,
+} from "@/lib/site-content-api";
 
-export default function Home() {
+// Homepage pulls Coaching / Videos / Testimonials from the DB —
+// keep it dynamic so admin edits show up without a rebuild.
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const [coaching, videos, testimonials] = await Promise.all([
+    getPublicCoachingPrograms(),
+    getPublicVideos(),
+    getPublicTestimonials(),
+  ]);
+
   return (
-    <main className="bg-paper font-sans text-ink">
-      <Header />
+    <main className="bg-paper font-sans text-ink overflow-x-hidden">
       <Hero />
 
       <ScrollReveal direction="up">
@@ -35,26 +49,20 @@ export default function Home() {
       </ScrollReveal>
 
       <ScrollReveal direction="left">
-        <JourneySection />
+        <JourneySection flag="home" />
       </ScrollReveal>
 
       <ScrollReveal direction="right">
-        <CoachingSection />
+        <CoachingSection coaching={coaching} />
       </ScrollReveal>
 
       <ScrollReveal direction="up">
-        <VideosSection />
+        <VideosSection videos={videos} />
       </ScrollReveal>
 
       <ScrollReveal direction="left">
-        <TestimonialsSection />
+        <TestimonialsSection testimonials={testimonials} />
       </ScrollReveal>
-
-      <ScrollReveal direction="up">
-        <FinalCta />
-      </ScrollReveal>
-
-      <SiteFooter />
     </main>
   );
 }

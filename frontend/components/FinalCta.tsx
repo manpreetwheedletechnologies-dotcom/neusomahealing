@@ -5,15 +5,15 @@ import Link from "next/link";
 export function FinalCta() {
   return (
     <section className="relative overflow-hidden bg-[#062d2b] text-white">
-      <div className="mx-auto grid min-h-[150px] max-w-[1320px] grid-cols-[34%_41%_25%] items-center max-[900px]:grid-cols-[32%_68%] max-[700px]:grid-cols-1">
+      <div className="mx-auto grid min-h-[200px] max-w-[1320px] grid-cols-[34%_41%_25%] items-center max-[900px]:grid-cols-[32%_68%] max-[700px]:grid-cols-1">
 
         {/* LEFT IMAGE */}
-        <div className="relative h-[150px] overflow-hidden max-[700px]:h-[220px]">
+        <div className="relative h-[200px] overflow-hidden max-[700px]:h-[220px]">
           <Image
             src="/images/cta-woman-image.png"
             alt=""
             fill
-            sizes="34vw"
+            sizes="40vw"
             className="object-cover object-center"
             priority
           />

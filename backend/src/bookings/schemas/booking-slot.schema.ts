@@ -85,6 +85,22 @@ export class BookingSlot {
   })
   isActive: boolean;
 
+  /*
+   * Per-slot price override (INR, whole rupees).
+   *
+   * undefined/null => falls back to the parent
+   * session type's global price.
+   *
+   * Lets admin mark one specific slot as paid
+   * or free independently of the session type,
+   * and set its exact amount.
+   */
+  @Prop({
+    min: 0,
+    default: null,
+  })
+  price?: number | null;
+
     /*
    * One BookingSlot = one Zoom meeting.
    *

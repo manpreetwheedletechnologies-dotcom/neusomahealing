@@ -5,14 +5,17 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import { useRouter } from "next/navigation";
 
 import {
+  Bell,
   BookOpenText,
   CalendarDays,
+  ChevronDown,
   ChevronRight,
   FilePenLine,
   Gauge,
@@ -20,6 +23,7 @@ import {
   Mail,
   Menu,
   MessageSquareText,
+  MessagesSquare,
   PlaySquare,
   Plus,
   Save,
@@ -46,6 +50,13 @@ import {
   Booking,
 } from "@/components/admin/BookingsSection";
 
+import {
+  ChatsSection,
+  ChatConversation,
+} from "@/components/admin/ChatsSection";
+
+import { AudienceSection } from "@/components/admin/AudienceSection";
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -57,8 +68,10 @@ type Tab =
   | "videos"
   | "testimonials"
   | "enquiries"
+  | "chats"
   | "bookings"
   | "subscribers"
+  | "audience"
   | "pages";
 
 type AnyRecord =
@@ -150,6 +163,11 @@ const nav: {
     icon: MessageSquareText,
   },
   {
+    key: "chats",
+    label: "Chat Queries",
+    icon: MessagesSquare,
+  },
+  {
     key: "bookings",
     label: "Bookings",
     icon: CalendarDays,
@@ -158,6 +176,11 @@ const nav: {
     key: "subscribers",
     label: "Subscribers",
     icon: Mail,
+  },
+  {
+    key: "audience",
+    label: "Audience",
+    icon: UsersRound,
   },
   {
     key: "pages",
@@ -872,6 +895,30 @@ export function AdminPanel() {
           }
 
           /* =========================
+             CHAT QUERIES
+          ========================= */
+
+          else if (
+            target ===
+            "chats"
+          ) {
+            const response =
+              await apiRequest<
+                AnyRecord[]
+              >(
+                "/chat/admin/all",
+              );
+
+            setItems(
+              Array.isArray(
+                response,
+              )
+                ? response
+                : [],
+            );
+          }
+
+          /* =========================
              SUBSCRIBERS
           ========================= */
 
@@ -1131,7 +1178,10 @@ export function AdminPanel() {
       tab ===
       "bookings"
         ? `/bookings/${id}/status`
-        : `/enquiries/${id}/status`;
+        : tab ===
+          "chats"
+          ? `/chat/admin/${id}/status`
+          : `/enquiries/${id}/status`;
 
     try {
       await apiRequest(
@@ -1358,8 +1408,8 @@ export function AdminPanel() {
           SIDEBAR
       =================================================== */}
 
-     <aside
-  className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-[270px] flex-col overflow-hidden border-r border-white/10 bg-[#082f2d] p-5 text-white transition-transform min-[901px]:translate-x-0 ${
+<aside
+  className={`fixed left-0 top-0 z-50 flex h-screen w-[270px] flex-col overflow-hidden border-r border-white/10 bg-[#082f2d] p-5 text-white transition-transform min-[901px]:translate-x-0 ${
     sidebar
       ? "translate-x-0"
       : "max-[900px]:-translate-x-full"
@@ -1370,9 +1420,9 @@ export function AdminPanel() {
 
           <a href="/">
             <img
-              src="/no_bg_neusomalogo_1.png"
+              src="/logo_mw.png"
               alt="NeusomaHealing"
-              className="w-28 object-contain"
+              className="w-46"
             />
           </a>
 
@@ -1518,30 +1568,55 @@ export function AdminPanel() {
               />
             </button>
 
-            <div>
+            <p className="font-serif text-lg italic text-[#4b5a53] max-[700px]:hidden">
+              More Healing. More Clarity. More You.
+            </p>
 
-              <h1 className="font-serif text-2xl">
-                {title}
-              </h1>
+          </div>
 
-              <p className="text-[11px] text-[#74807a]">
-                NeusomaHealing
-                content
-                management
-              </p>
+          <div className="flex items-center gap-5">
+
+            <a
+              href="/"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-[#ccd5cf] px-4 py-2 text-xs font-semibold text-[#29433c] transition hover:bg-white max-[700px]:hidden"
+            >
+              View website ↗
+            </a>
+
+            <button
+              type="button"
+              aria-label="Notifications"
+              className="relative rounded-full border border-[#d9dfda] bg-white p-2.5 text-[#29433c] transition hover:bg-[#f3f6f3]"
+            >
+              <Bell size={17} />
+              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#c0392b]" />
+            </button>
+
+            <div className="flex items-center gap-2.5 rounded-full border border-[#d9dfda] bg-white py-1.5 pl-1.5 pr-3">
+
+              <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-[#0b3b38] text-xs font-bold text-white">
+                {(admin?.name || "Admin")
+                  .trim()
+                  .charAt(0)
+                  .toUpperCase()}
+              </div>
+
+              <div className="leading-tight max-[500px]:hidden">
+                <p className="text-xs font-semibold text-[#172420]">
+                  {admin?.name?.split(" ")[0] || "Admin"}
+                </p>
+                <p className="text-[10px] text-[#74807a]">
+                  Administrator
+                </p>
+              </div>
+
+              <ChevronDown size={14} className="text-[#89948f]" />
 
             </div>
 
           </div>
-
-          <a
-            href="/"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-full border border-[#ccd5cf] px-4 py-2 text-xs font-semibold text-[#29433c] transition hover:bg-white"
-          >
-            View website ↗
-          </a>
 
         </header>
 
@@ -1589,6 +1664,16 @@ export function AdminPanel() {
               data={
                 dashboard
               }
+              adminName={
+                admin?.name
+              }
+              onNavigate={(
+                target,
+              ) =>
+                setTab(
+                  target,
+                )
+              }
             />
           ) : tab ===
             "pages" ? (
@@ -1615,6 +1700,9 @@ export function AdminPanel() {
                 savingContent
               }
             />
+          ) : tab ===
+            "audience" ? (
+            <AudienceSection />
           ) : tab ===
             "subscribers" ? (
             <SubscribersSection
@@ -1656,6 +1744,25 @@ export function AdminPanel() {
                 updatingStatusId
               }
             />
+          ) : tab ===
+            "chats" ? (
+            <ChatsSection
+              items={
+                items as ChatConversation[]
+              }
+              search={
+                search
+              }
+              setSearch={
+                setSearch
+              }
+              updateStatus={
+                updateStatus
+              }
+              updatingStatusId={
+                updatingStatusId
+              }
+            />
          ) : tab ===
   "bookings" ? (
   <BookingsSection
@@ -1664,6 +1771,7 @@ export function AdminPanel() {
     setSearch={setSearch}
     updateStatus={updateStatus}
     updatingStatusId={updatingStatusId}
+    onRefresh={() => loadTab("bookings")}
   />
 ) : (
             <CrudTable
@@ -1758,122 +1866,483 @@ function Loading() {
 
 function Dashboard({
   data,
+  adminName,
+  onNavigate,
 }: {
   data: AnyRecord;
+  adminName?: string;
+  onNavigate?: (
+    tab: Tab,
+  ) => void;
 }) {
-  const cards = [
-    [
-      "New enquiries",
-      data.newEnquiries ||
+  const firstName =
+    adminName
+      ?.trim()
+      .split(" ")[0];
+
+  const greeting =
+    useMemo(() => {
+      const hour =
+        new Date().getHours();
+      if (hour < 12)
+        return "Good morning";
+      if (hour < 17)
+        return "Good afternoon";
+      return "Good evening";
+    }, []);
+
+  const today =
+    useMemo(
+      () =>
+        new Date().toLocaleDateString(
+          "en-IN",
+          {
+            weekday:
+              "long",
+            day: "numeric",
+            month:
+              "long",
+          },
+        ),
+      [],
+    );
+
+  const leadCards: {
+    label: string;
+    value: number;
+    icon: any;
+    tab: Tab;
+    accent: string;
+    bar: string;
+  }[] = [
+    {
+      label:
+        "New enquiries",
+      value:
+        data.newEnquiries ||
         0,
-      MessageSquareText,
-    ],
+      icon: MessageSquareText,
+      tab: "enquiries",
+      accent:
+        "bg-[#fbeee4] text-[#a5622a]",
+      bar: "bg-[#e8a165]",
+    },
 
-    [
-      "New bookings",
-      data.newBookings ||
+    {
+      label:
+        "New chat queries",
+      value:
+        data.newChats ||
         0,
-      CalendarDays,
-    ],
+      icon: MessagesSquare,
+      tab: "chats",
+      accent:
+        "bg-[#eaf1fb] text-[#2d5e94]",
+      bar: "bg-[#5c8fc9]",
+    },
 
-    [
-      "Subscribers",
-      data.subscribers ||
+    {
+      label:
+        "New bookings",
+      value:
+        data.newBookings ||
         0,
-      Mail,
-    ],
+      icon: CalendarDays,
+      tab: "bookings",
+      accent:
+        "bg-[#eef5ee] text-[#3b7a4f]",
+      bar: "bg-[#5fa878]",
+    },
+  ];
 
-    [
-      "Insights",
-      data.posts || 0,
-      BookOpenText,
-    ],
-
-    [
-      "Videos",
-      data.videos || 0,
-      PlaySquare,
-    ],
-
-    [
-      "Coaching programs",
-      data.coaching ||
+  const contentCards: {
+    label: string;
+    value: number;
+    icon: any;
+    tab: Tab;
+    accent: string;
+  }[] = [
+    {
+      label:
+        "Subscribers",
+      value:
+        data.subscribers ||
         0,
-      Sparkles,
-    ],
+      icon: Mail,
+      tab: "subscribers",
+      accent:
+        "bg-[#f3eefb] text-[#6b4a9c]",
+    },
 
-    [
-      "Testimonials",
-      data.testimonials ||
+    {
+      label: "Insights",
+      value:
+        data.posts || 0,
+      icon: BookOpenText,
+      tab: "insights",
+      accent:
+        "bg-[#eef5f1] text-[#0d4a44]",
+    },
+
+    {
+      label: "Videos",
+      value:
+        data.videos || 0,
+      icon: PlaySquare,
+      tab: "videos",
+      accent:
+        "bg-[#fdf0ee] text-[#b0503f]",
+    },
+
+    {
+      label:
+        "Coaching programs",
+      value:
+        data.coaching ||
         0,
-      UsersRound,
-    ],
+      icon: Sparkles,
+      tab: "coaching",
+      accent:
+        "bg-[#fdf6e6] text-[#9a752b]",
+    },
+
+    {
+      label:
+        "Testimonials",
+      value:
+        data.testimonials ||
+        0,
+      icon: UsersRound,
+      tab: "testimonials",
+      accent:
+        "bg-[#eafaf5] text-[#1f8a6f]",
+    },
+  ];
+
+  const maxContentValue =
+    Math.max(
+      1,
+      ...contentCards.map(
+        (c) => c.value,
+      ),
+    );
+
+  const totalEnquiries =
+    data.totalEnquiries ||
+    0;
+
+  const totalBookings =
+    data.totalBookings ||
+    0;
+
+  const pipelineTotal =
+    Math.max(
+      totalEnquiries +
+        totalBookings,
+      1,
+    );
+
+  const enquiryShare =
+    Math.round(
+      (totalEnquiries /
+        pipelineTotal) *
+        100,
+    );
+
+  const publishables:
+    {
+      label: string;
+      tab: Tab;
+      count: number;
+    }[] = [
+    {
+      label: "Insights",
+      tab: "insights",
+      count:
+        data.posts || 0,
+    },
+    {
+      label: "Videos",
+      tab: "videos",
+      count:
+        data.videos || 0,
+    },
+    {
+      label: "Coaching",
+      tab: "coaching",
+      count:
+        data.coaching ||
+        0,
+    },
+  ];
+
+  const quickActions: {
+    label: string;
+    tab: Tab;
+    icon: any;
+  }[] = [
+    {
+      label:
+        "Add an Insight",
+      tab: "insights",
+      icon: BookOpenText,
+    },
+    {
+      label: "Add a Video",
+      tab: "videos",
+      icon: PlaySquare,
+    },
+    {
+      label:
+        "Add a Coaching program",
+      tab: "coaching",
+      icon: Sparkles,
+    },
+    {
+      label:
+        "Review enquiries",
+      tab: "enquiries",
+      icon: MessageSquareText,
+    },
   ];
 
   return (
     <>
 
-      <section className="overflow-hidden rounded-[26px] bg-[#0b3a37] p-8 text-white">
+      {/* HERO */}
 
-        <p className="text-[10px] uppercase tracking-[.22em] text-[#d2a873]">
-          Overview
-        </p>
+      <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#0b3a37] via-[#0d4a44] to-[#123f3a] p-8 text-white max-[600px]:p-6">
 
-        <h2 className="mt-3 max-w-[640px] font-serif text-[clamp(32px,4vw,50px)] leading-[1.03]">
-          Everything you
-          need to keep the
-          website current.
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#c28b4d]/20 blur-3xl"
+        />
+
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-28 left-1/3 h-64 w-64 rounded-full bg-white/5 blur-3xl"
+        />
+
+        <div className="relative flex flex-wrap items-center justify-between gap-3">
+
+          <p className="text-[10px] uppercase tracking-[.22em] text-[#d2a873]">
+            {greeting}
+            {firstName
+              ? `, ${firstName}`
+              : ""}
+          </p>
+
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold text-[#cfe0d8] backdrop-blur">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7fe3ab]" />
+            {today}
+          </span>
+
+        </div>
+
+        <h2 className="relative mt-3 max-w-[640px] font-serif text-[clamp(28px,4vw,46px)] leading-[1.08]">
+          {firstName
+            ? "Here's what's happening on the site."
+            : "Everything you need to keep the website current."}
         </h2>
 
-        <p className="mt-4 max-w-[640px] text-sm leading-7 text-[#afc2bc]">
+        <p className="relative mt-4 max-w-[600px] text-sm leading-7 text-[#afc2bc]">
           Content changes
           made here are read
           by the public
           website through
           the NestJS API and
-          MongoDB.
+          MongoDB — publish
+          or draft anything,
+          anytime.
         </p>
+
+        {onNavigate && (
+          <div className="relative mt-6 flex flex-wrap gap-2.5">
+
+            {quickActions.map(
+              (
+                action,
+              ) => (
+                <button
+                  key={
+                    action.label
+                  }
+                  type="button"
+                  onClick={() =>
+                    onNavigate(
+                      action.tab,
+                    )
+                  }
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                >
+                  <action.icon
+                    size={
+                      14
+                    }
+                  />
+                  {
+                    action.label
+                  }
+                </button>
+              ),
+            )}
+
+          </div>
+        )}
 
       </section>
 
-      {/* DASHBOARD CARDS */}
+      {/* TODAY AT A GLANCE */}
 
-      <section className="mt-6 grid grid-cols-3 gap-4 max-[1050px]:grid-cols-2 max-[600px]:grid-cols-1">
+      <div className="mt-8 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-[#5e6b65]">
+          Today at a glance
+        </p>
+        <p className="text-[11px] text-[#9aa39d]">
+          New &amp; unread
+          activity
+        </p>
+      </div>
 
-        {cards.map(
-          ([
-            label,
-            value,
-            Icon,
-          ]: any) => (
-            <article
+      <section className="mt-3 grid grid-cols-3 gap-4 max-[750px]:grid-cols-1">
+
+        {leadCards.map(
+          (card) => (
+            <button
+              type="button"
               key={
-                label
+                card.label
               }
-              className="rounded-2xl border border-[#dce1dc] bg-white p-5 shadow-[0_8px_30px_rgba(37,56,49,.04)]"
+              onClick={() =>
+                onNavigate?.(
+                  card.tab,
+                )
+              }
+              className="group relative flex items-center gap-4 overflow-hidden rounded-2xl border border-[#dce1dc] bg-white p-5 text-left shadow-[0_8px_30px_rgba(37,56,49,.04)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(37,56,49,.1)]"
             >
 
-              <div className="flex items-center justify-between">
+              <span
+                className={`absolute left-0 top-0 h-full w-1 ${card.bar}`}
+              />
 
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#eef5f1] text-[#0d4a44]">
-                  <Icon
-                    size={
-                      18
-                    }
-                  />
-                </div>
-
-                <span className="font-serif text-3xl">
-                  {value}
-                </span>
-
+              <div
+                className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${card.accent}`}
+              >
+                <card.icon
+                  size={
+                    20
+                  }
+                />
               </div>
 
-              <p className="mt-5 text-xs font-semibold text-[#5e6b65]">
-                {label}
+              <div className="min-w-0">
+                <span className="block font-serif text-3xl leading-none text-[#172420]">
+                  {
+                    card.value
+                  }
+                </span>
+
+                <p className="mt-1.5 truncate text-xs font-semibold text-[#5e6b65]">
+                  {
+                    card.label
+                  }
+                </p>
+              </div>
+
+              {card.value >
+                0 && (
+                <span className="absolute right-4 top-4 h-2 w-2 rounded-full bg-[#c0392b]" />
+              )}
+
+              <ChevronRight
+                size={
+                  15
+                }
+                className="ml-auto shrink-0 text-[#c7cec9] opacity-0 transition group-hover:opacity-100"
+              />
+
+            </button>
+          ),
+        )}
+
+      </section>
+
+      {/* CONTENT LIBRARY */}
+
+      <div className="mt-8 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-[#5e6b65]">
+          Content library
+        </p>
+        <p className="text-[11px] text-[#9aa39d]">
+          Everything
+          published on the
+          site
+        </p>
+      </div>
+
+      <section className="mt-3 grid grid-cols-5 gap-4 max-[1150px]:grid-cols-3 max-[650px]:grid-cols-2 max-[420px]:grid-cols-1">
+
+        {contentCards.map(
+          (card) => (
+            <button
+              type="button"
+              key={
+                card.label
+              }
+              onClick={() =>
+                onNavigate?.(
+                  card.tab,
+                )
+              }
+              className="group relative overflow-hidden rounded-2xl border border-[#dce1dc] bg-white p-5 text-left shadow-[0_8px_30px_rgba(37,56,49,.04)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(37,56,49,.1)]"
+            >
+
+              <div
+                className={`grid h-10 w-10 place-items-center rounded-xl ${card.accent}`}
+              >
+                <card.icon
+                  size={
+                    18
+                  }
+                />
+              </div>
+
+              <span className="mt-5 block font-serif text-3xl text-[#172420]">
+                {
+                  card.value
+                }
+              </span>
+
+              <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-[#5e6b65]">
+                {
+                  card.label
+                }
+
+                <ChevronRight
+                  size={
+                    12
+                  }
+                  className="opacity-0 transition group-hover:opacity-100"
+                />
               </p>
 
-            </article>
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#f0f2ef]">
+                <div
+                  className="h-full rounded-full bg-[#0d4a44]/70 transition-all group-hover:bg-[#0d4a44]"
+                  style={{
+                    width: `${Math.max(
+                      6,
+                      Math.round(
+                        (card.value /
+                          maxContentValue) *
+                          100,
+                      ),
+                    )}%`,
+                  }}
+                />
+              </div>
+
+            </button>
           ),
         )}
 
@@ -1881,49 +2350,174 @@ function Dashboard({
 
       {/* DASHBOARD LOWER CARDS */}
 
-      <section className="mt-6 grid grid-cols-2 gap-4 max-[800px]:grid-cols-1">
+      <section className="mt-8 grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
 
         <article className="rounded-2xl border border-[#dce1dc] bg-white p-6">
 
-          <p className="text-xs font-semibold">
+          <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
             Lead pipeline
           </p>
 
-          <p className="mt-3 text-sm text-[#76817c]">
-            Total enquiries:{" "}
-            <strong className="text-[#20322c]">
-              {data.totalEnquiries ||
-                0}
-            </strong>
-          </p>
+          <div className="mt-5 flex items-center gap-5">
 
-          <p className="mt-2 text-sm text-[#76817c]">
-            Total bookings:{" "}
-            <strong className="text-[#20322c]">
-              {data.totalBookings ||
-                0}
-            </strong>
+            <div
+              className="relative grid h-[104px] w-[104px] shrink-0 place-items-center rounded-full"
+              style={{
+                background: `conic-gradient(#c28b4d 0% ${enquiryShare}%, #0d4a44 ${enquiryShare}% 100%)`,
+              }}
+            >
+
+              <div className="grid h-[76px] w-[76px] place-items-center rounded-full bg-white text-center">
+                <span>
+                  <span className="block font-serif text-xl leading-none text-[#172420]">
+                    {totalEnquiries +
+                      totalBookings}
+                  </span>
+                  <span className="mt-1 block text-[9px] uppercase tracking-wide text-[#9aa39d]">
+                    Total leads
+                  </span>
+                </span>
+              </div>
+
+            </div>
+
+            <div className="space-y-3">
+
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#c28b4d]" />
+                <span className="text-sm font-semibold text-[#172420]">
+                  {
+                    totalEnquiries
+                  }
+                </span>
+                <span className="text-[11px] text-[#87908c]">
+                  Enquiries
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#0d4a44]" />
+                <span className="text-sm font-semibold text-[#172420]">
+                  {
+                    totalBookings
+                  }
+                </span>
+                <span className="text-[11px] text-[#87908c]">
+                  Bookings
+                </span>
+              </div>
+
+            </div>
+
+          </div>
+
+          <p className="mt-4 text-[10px] text-[#87908c]">
+            Enquiries make up{" "}
+            {
+              enquiryShare
+            }
+            % of total lead
+            volume.
           </p>
 
         </article>
 
         <article className="rounded-2xl border border-[#dce1dc] bg-white p-6">
 
-          <p className="text-xs font-semibold">
+          <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
             Publishing
             workflow
           </p>
 
-          <p className="mt-3 text-sm leading-6 text-[#76817c]">
-            Use the
-            Published
-            switches to
-            prepare content
-            privately before
-            making it visible
-            on the public
+          <p className="mt-3 text-[11px] leading-5 text-[#87908c]">
+            Live content
+            currently published
+            to the public
             website.
           </p>
+
+          <div className="mt-4 space-y-3">
+
+            {publishables.map(
+              (
+                item,
+              ) => (
+                <button
+                  type="button"
+                  key={
+                    item.label
+                  }
+                  onClick={() =>
+                    onNavigate?.(
+                      item.tab,
+                    )
+                  }
+                  className="flex w-full items-center justify-between rounded-xl border border-[#eceee9] px-3.5 py-2.5 text-left transition hover:border-[#dce1dc] hover:bg-[#f7f9f6]"
+                >
+                  <span className="text-xs font-semibold text-[#3a453f]">
+                    {
+                      item.label
+                    }
+                  </span>
+
+                  <span className="rounded-full bg-[#eef5f1] px-2.5 py-1 text-[10px] font-semibold text-[#0d4a44]">
+                    {
+                      item.count
+                    }{" "}
+                    items
+                  </span>
+                </button>
+              ),
+            )}
+
+          </div>
+
+        </article>
+
+        <article className="rounded-2xl border border-[#dce1dc] bg-white p-6">
+
+          <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
+            Quick actions
+          </p>
+
+          <p className="mt-3 text-[11px] leading-5 text-[#87908c]">
+            Jump straight into
+            the module you
+            need.
+          </p>
+
+          <div className="mt-4 space-y-2">
+
+            {quickActions.map(
+              (
+                action,
+              ) => (
+                <button
+                  type="button"
+                  key={
+                    action.label
+                  }
+                  onClick={() =>
+                    onNavigate?.(
+                      action.tab,
+                    )
+                  }
+                  className="flex w-full items-center gap-2.5 rounded-xl border border-[#eceee9] px-3.5 py-2.5 text-left text-xs font-semibold text-[#3a453f] transition hover:border-[#dce1dc] hover:bg-[#f7f9f6]"
+                >
+                  <action.icon
+                    size={
+                      14
+                    }
+                    className="text-[#0d4a44]"
+                  />
+                  {
+                    action.label
+                  }
+                </button>
+              ),
+            )}
+
+          </div>
 
         </article>
 
@@ -1936,6 +2530,89 @@ function Dashboard({
 /* =========================================================
    GENERIC CRUD TABLE
 ========================================================= */
+
+/* =========================================================
+   VIDEO FRAME PREVIEW
+
+   For videos that don't have a manually uploaded thumbnail,
+   this pulls the actual first frame out of the video file
+   itself so the list still shows something real instead of
+   a blank/generic placeholder.
+========================================================= */
+
+function VideoFramePreview({
+  src,
+}: {
+  src: string;
+}) {
+  const videoRef =
+    useRef<HTMLVideoElement>(
+      null,
+    );
+
+  const [
+    failed,
+    setFailed,
+  ] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="grid h-12 w-16 shrink-0 place-items-center rounded-lg border border-dashed border-[#d4dbd6] bg-[#f4f6f3] text-[#a7b0aa]">
+        <PlaySquare
+          size={16}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-lg border border-[#e7ebe6] bg-black">
+
+      <video
+        ref={
+          videoRef
+        }
+        src={src}
+        muted
+        playsInline
+        preload="metadata"
+        className="h-full w-full object-cover"
+        onLoadedMetadata={() => {
+          // Seeking a hair past 0 forces most browsers to
+          // paint a real frame instead of staying black.
+          const el =
+            videoRef.current;
+          if (el) {
+            try {
+              el.currentTime = Math.min(
+                0.1,
+                el.duration ||
+                  0.1,
+              );
+            } catch {
+              // Ignore — some formats
+              // reject seeking before
+              // enough data has loaded.
+            }
+          }
+        }}
+        onError={() =>
+          setFailed(
+            true,
+          )
+        }
+      />
+
+      <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/10">
+        <PlaySquare
+          size={14}
+          className="text-white drop-shadow"
+        />
+      </div>
+
+    </div>
+  );
+}
 
 function CrudTable({
   tab,
@@ -2055,7 +2732,13 @@ function CrudTable({
             <tbody className="divide-y divide-[#edf0ed]">
 
               {items.map(
-                (item) => (
+                (item) => {
+                  const thumbnail =
+                    item.thumbnail ||
+                    item.featuredImage ||
+                    item.image;
+
+                  return (
                   <tr
                     key={
                       item._id
@@ -2065,17 +2748,53 @@ function CrudTable({
 
                     <td className="px-5 py-4">
 
-                      <p className="max-w-[420px] truncate text-sm font-semibold">
-                        {item.title ||
-                          item.name}
-                      </p>
+                      <div className="flex items-center gap-3">
 
-                      <p className="mt-1 max-w-[500px] truncate text-[11px] text-[#818b86]">
-                        {item.description ||
-                          item.excerpt ||
-                          item.quote ||
-                          item.tagline}
-                      </p>
+                        {thumbnail ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={
+                              thumbnail
+                            }
+                            alt=""
+                            className="h-12 w-16 shrink-0 rounded-lg border border-[#e7ebe6] object-cover"
+                          />
+                        ) : tab ===
+                            "videos" &&
+                          item.url ? (
+                          <VideoFramePreview
+                            src={
+                              item.url
+                            }
+                          />
+                        ) : tab ===
+                          "videos" ? (
+                          <div className="grid h-12 w-16 shrink-0 place-items-center rounded-lg border border-dashed border-[#d4dbd6] bg-[#f4f6f3] text-[#a7b0aa]">
+                            <PlaySquare
+                              size={
+                                16
+                              }
+                            />
+                          </div>
+                        ) : null}
+
+                        <div className="min-w-0">
+
+                          <p className="max-w-[360px] truncate text-sm font-semibold">
+                            {item.title ||
+                              item.name}
+                          </p>
+
+                          <p className="mt-1 max-w-[440px] truncate text-[11px] text-[#818b86]">
+                            {item.description ||
+                              item.excerpt ||
+                              item.quote ||
+                              item.tagline}
+                          </p>
+
+                        </div>
+
+                      </div>
 
                     </td>
 
@@ -2085,6 +2804,7 @@ function CrudTable({
                         item.type ||
                         "—"}
                     </td>
+
 
                     <td className="px-5 py-4">
 
@@ -2147,7 +2867,8 @@ function CrudTable({
                     </td>
 
                   </tr>
-                ),
+                  );
+                },
               )}
 
             </tbody>
@@ -2634,15 +3355,28 @@ function FieldEditor({
     setUploadError,
   ] = useState("");
 
-  const mediaField =
+  const [
+    showLinkInput,
+    setShowLinkInput,
+  ] = useState(false);
+
+  const isImageField =
     [
       "image",
       "featuredImage",
       "thumbnail",
-      "url",
     ].includes(
       field.key,
     );
+
+  // The "url" field is only used by the Videos config for the
+  // actual video file, so it gets the same upload treatment.
+  const isVideoField =
+    field.key === "url";
+
+  const mediaField =
+    isImageField ||
+    isVideoField;
 
   async function upload(
     file?: File,
@@ -2684,6 +3418,10 @@ function FieldEditor({
       onChange(
         result.url,
       );
+
+      setShowLinkInput(
+        false,
+      );
     } catch (error) {
       setUploadError(
         error instanceof
@@ -2704,7 +3442,8 @@ function FieldEditor({
         field.type ===
           "textarea" ||
         field.type ===
-          "lines"
+          "lines" ||
+        mediaField
           ? "col-span-2 max-[650px]:col-span-1"
           : ""
       } block`}
@@ -2759,91 +3498,276 @@ function FieldEditor({
             field.placeholder
           }
         />
+      ) : mediaField ? (
+        <MediaFieldUploader
+          isVideo={
+            isVideoField
+          }
+          value={value}
+          uploading={
+            uploading
+          }
+          uploadError={
+            uploadError
+          }
+          showLinkInput={
+            showLinkInput
+          }
+          setShowLinkInput={
+            setShowLinkInput
+          }
+          onUpload={upload}
+          onChange={
+            onChange
+          }
+          required={
+            field.required
+          }
+        />
       ) : (
-        <>
-
-          <input
-            required={
-              field.required
-            }
-            type={
-              field.type ===
-              "number"
-                ? "number"
-                : "text"
-            }
-            value={
-              value
-            }
-            onChange={(
-              event,
-            ) =>
-              onChange(
-                event
-                  .target
-                  .value,
-              )
-            }
-            className="w-full rounded-xl border border-[#d8ddd9] bg-white px-4 py-3 text-sm outline-none focus:border-[#a87843]"
-            placeholder={
-              field.placeholder
-            }
-          />
-
-          {mediaField && (
-            <>
-
-              <span className="mt-2 flex items-center gap-3">
-
-                <span className="relative inline-flex cursor-pointer items-center rounded-lg border border-[#d4dbd6] bg-white px-3 py-2 text-[10px] font-semibold text-[#52605a] hover:bg-[#f2f5f2]">
-
-                  {uploading
-                    ? "Uploading…"
-                    : "Upload media"}
-
-                  <input
-                    disabled={
-                      uploading
-                    }
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
-                    className="absolute inset-0 cursor-pointer opacity-0"
-                    onChange={(
-                      event,
-                    ) =>
-                      upload(
-                        event
-                          .target
-                          .files?.[0],
-                      )
-                    }
-                  />
-
-                </span>
-
-                {value && (
-                  <span className="max-w-[260px] truncate text-[10px] text-[#87908c]">
-                    {value}
-                  </span>
-                )}
-
-              </span>
-
-              {uploadError && (
-                <span className="mt-1 block text-[10px] text-red-600">
-                  {
-                    uploadError
-                  }
-                </span>
-              )}
-
-            </>
-          )}
-
-        </>
+        <input
+          required={
+            field.required
+          }
+          type={
+            field.type ===
+            "number"
+              ? "number"
+              : "text"
+          }
+          value={
+            value
+          }
+          onChange={(
+            event,
+          ) =>
+            onChange(
+              event
+                .target
+                .value,
+            )
+          }
+          className="w-full rounded-xl border border-[#d8ddd9] bg-white px-4 py-3 text-sm outline-none focus:border-[#a87843]"
+          placeholder={
+            field.placeholder
+          }
+        />
       )}
 
     </label>
+  );
+}
+
+/* =========================================================
+   MEDIA UPLOADER (IMAGE / VIDEO)
+
+   Shows an actual preview of the uploaded image or video
+   instead of the raw file path/URL. Uploading is the primary
+   action; a small "paste a link instead" toggle stays available
+   for cases where the media already lives elsewhere.
+========================================================= */
+
+function MediaFieldUploader({
+  isVideo,
+  value,
+  uploading,
+  uploadError,
+  showLinkInput,
+  setShowLinkInput,
+  onUpload,
+  onChange,
+  required,
+}: {
+  isVideo: boolean;
+  value: any;
+  uploading: boolean;
+  uploadError: string;
+  showLinkInput: boolean;
+  setShowLinkInput: (
+    value: boolean,
+  ) => void;
+  onUpload: (
+    file?: File,
+  ) => void;
+  onChange: (
+    value: any,
+  ) => void;
+  required?: boolean;
+}) {
+  const hasValue =
+    Boolean(
+      value &&
+        String(value).trim(),
+    );
+
+  return (
+    <div>
+
+      <div
+        className={`overflow-hidden rounded-xl border ${
+          hasValue
+            ? "border-[#d8ddd9] bg-white"
+            : "border-dashed border-[#c7cfc9] bg-[#f4f6f3]"
+        }`}
+      >
+
+        {hasValue ? (
+          <div className="relative">
+
+            {isVideo ? (
+              <video
+                key={value}
+                src={value}
+                controls
+                className="max-h-[220px] w-full bg-black object-contain"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={value}
+                alt="Preview"
+                className="max-h-[220px] w-full object-cover"
+              />
+            )}
+
+            <div className="flex items-center justify-between gap-2 border-t border-[#e7ebe6] bg-[#fbfcfa] px-3 py-2">
+
+              <label className="relative inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#d4dbd6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#52605a] hover:bg-[#f2f5f2]">
+                {uploading
+                  ? "Uploading…"
+                  : "Replace"}
+
+                <input
+                  disabled={
+                    uploading
+                  }
+                  type="file"
+                  accept={
+                    isVideo
+                      ? "video/mp4,video/webm,video/quicktime"
+                      : "image/jpeg,image/png,image/webp,image/gif"
+                  }
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  onChange={(
+                    event,
+                  ) =>
+                    onUpload(
+                      event
+                        .target
+                        .files?.[0],
+                    )
+                  }
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onChange("")
+                }
+                className="rounded-lg border border-red-100 px-3 py-1.5 text-[10px] font-semibold text-red-600 hover:bg-red-50"
+              >
+                Remove
+              </button>
+
+            </div>
+
+          </div>
+        ) : (
+          <label className="relative flex cursor-pointer flex-col items-center justify-center gap-2 px-4 py-8 text-center">
+
+            <span className="text-xs font-semibold text-[#52605a]">
+              {uploading
+                ? "Uploading…"
+                : `Upload ${
+                    isVideo
+                      ? "a video"
+                      : "an image"
+                  }`}
+            </span>
+
+            <span className="text-[10px] text-[#8b948e]">
+              {isVideo
+                ? "MP4, WEBM or MOV"
+                : "JPEG, PNG, WEBP or GIF"}
+            </span>
+
+            <input
+              required={
+                required &&
+                !hasValue
+              }
+              disabled={
+                uploading
+              }
+              type="file"
+              accept={
+                isVideo
+                  ? "video/mp4,video/webm,video/quicktime"
+                  : "image/jpeg,image/png,image/webp,image/gif"
+              }
+              className="absolute inset-0 cursor-pointer opacity-0"
+              onChange={(
+                event,
+              ) =>
+                onUpload(
+                  event
+                    .target
+                    .files?.[0],
+                )
+              }
+            />
+
+          </label>
+        )}
+
+      </div>
+
+      {uploadError && (
+        <span className="mt-1.5 block text-[10px] text-red-600">
+          {uploadError}
+        </span>
+      )}
+
+      <button
+        type="button"
+        onClick={() =>
+          setShowLinkInput(
+            !showLinkInput,
+          )
+        }
+        className="mt-1.5 text-[10px] font-semibold text-[#8b6a3f] underline-offset-2 hover:underline"
+      >
+        {showLinkInput
+          ? "Hide link field"
+          : "Paste a link instead"}
+      </button>
+
+      {showLinkInput && (
+        <input
+          type="text"
+          value={
+            value || ""
+          }
+          onChange={(
+            event,
+          ) =>
+            onChange(
+              event
+                .target
+                .value,
+            )
+          }
+          placeholder={
+            isVideo
+              ? "https://... or /videos/example.mp4"
+              : "https://... or /images/example.jpg"
+          }
+          className="mt-2 w-full rounded-xl border border-[#d8ddd9] bg-white px-4 py-2.5 text-xs outline-none focus:border-[#a87843]"
+        />
+      )}
+
+    </div>
   );
 }
 

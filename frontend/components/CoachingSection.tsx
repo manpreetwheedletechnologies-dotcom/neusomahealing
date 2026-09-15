@@ -1,9 +1,15 @@
 import Image from "next/image";
 import { Reveal } from "@/components/Reveal";
-import { coaching } from "@/lib/home-data";
+import type { ApiCoachingProgram } from "@/lib/site-content-api";
 import { buttonLight, eyebrow, heading, sectionPad } from "@/lib/home-styles";
 
-export function CoachingSection() {
+export function CoachingSection({
+  coaching,
+}: {
+  coaching: ApiCoachingProgram[];
+}) {
+  const featured = coaching.slice(0, 4);
+
   return (
     <section className={`bg-[#f4ede2] ${sectionPad}`}>
       <Reveal className="mb-[18px] flex items-end justify-between gap-10 max-[700px]:block">
@@ -31,20 +37,22 @@ export function CoachingSection() {
       </Reveal>
 
       <div className="grid grid-cols-4 gap-[28px] max-[1000px]:grid-cols-2 max-[700px]:grid-cols-1">
-        {coaching.map((item) => (
+        {featured.map((item) => (
           <Reveal
-            key={item.title}
+            key={item._id}
             className="overflow-hidden rounded-[16px] border border-[#dfd2c0] bg-[#fffaf3]"
           >
             {/* IMAGE */}
-            <div className="relative h-[103px] overflow-hidden">
-              <Image
-                src={item.image}
-                alt={item.title}
-                fill
-                sizes="(max-width: 700px) 100vw, (max-width: 1000px) 50vw, 25vw"
-                className="object-cover"
-              />
+            <div className="relative h-[103px] overflow-hidden bg-[#e7d9c3]">
+              {item.image && (
+                <Image
+                  src={item.image}
+                  alt={item.title}
+                  fill
+                  sizes="(max-width: 700px) 100vw, (max-width: 1000px) 50vw, 25vw"
+                  className="object-cover"
+                />
+              )}
             </div>
 
             {/* CONTENT */}
@@ -54,12 +62,12 @@ export function CoachingSection() {
               </h3>
 
               <p className="mb-[12px] min-h-[58px] text-[12px] leading-[1.45] text-[#55504a]">
-                {item.text}
+                {item.description}
               </p>
 
               <a
                 className="text-[11px] font-semibold text-[#8b632f] transition hover:underline"
-                href="/coaching"
+                href={`/coaching/${item.slug}`}
               >
                 Learn more <span>→</span>
               </a>
