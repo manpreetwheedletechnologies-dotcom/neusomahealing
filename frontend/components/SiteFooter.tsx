@@ -223,6 +223,31 @@ export function SiteFooter() {
             </Link>
           </div>
         </div>
+
+        {/* Site credit */}
+        <div className="mt-6 flex justify-center">
+          <a
+            href="https://www.wheedletechnologies.ai/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="
+              group inline-flex items-center gap-2 rounded-full
+              border border-[#b27a39]/25 bg-white/[0.03] px-4 py-2
+              text-[10px] tracking-[0.05em] text-[#9eb1aa]
+              backdrop-blur-sm transition-all duration-300
+              hover:border-[#b27a39]/60 hover:bg-[#b27a39]/[0.08] hover:text-white
+              hover:-translate-y-0.5 hover:shadow-[0_6px_18px_-6px_rgba(178,122,57,0.35)]
+            "
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[#b27a39] transition-transform duration-300 group-hover:scale-125" />
+            <span>
+              Website crafted by{" "}
+              <span className="font-semibold text-[#d3a15f] transition-colors duration-300 group-hover:text-[#e8b876]">
+                Wheedle Technologies
+              </span>
+            </span>
+          </a>
+        </div>
       </div>
     </footer>
   );
