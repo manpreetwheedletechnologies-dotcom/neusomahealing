@@ -980,8 +980,21 @@ const storedSlots =
 
         activeRegistrationKey,
 
+        /*
+         * Webinars auto-confirm: the slot, capacity
+         * check and Zoom meeting already exist —
+         * there's nothing for an admin to review or
+         * assign, unlike a 1:1 request. Leaving this
+         * 'pending' was hiding the Zoom link from the
+         * user's dashboard (it's only ever exposed for
+         * confirmed/completed bookings) until an admin
+         * manually flipped the status, which never
+         * needed to happen for webinars.
+         */
         status:
-          'pending',
+          slot.bookingMode === 'webinar'
+            ? 'confirmed'
+            : 'pending',
 
         paymentStatus:
           effectivePrice &&
@@ -1241,22 +1254,52 @@ try {
       settings.timezone,
     );
 
+    const nowMinutes = this.getNowMinutesInTimezone(
+      settings.timezone,
+    );
+
     const serialized = bookings.map((booking) =>
       this.serializeMyBooking(booking),
     );
 
     /*
+     * A booking is "in the past" once its date has
+     * gone by, OR it's today and the time slot has
+     * already started — a 12:00 PM webinar shouldn't
+     * still show as upcoming at 3:00 PM the same day.
+     */
+    const hasBookingTimePassed = (booking: {
+      bookingDate?: string;
+      timeSlot?: string;
+    }) => {
+      if (!booking.bookingDate) return false;
+      if (booking.bookingDate < todayKey) return true;
+      if (booking.bookingDate > todayKey) return false;
+
+      // Same day — compare times. No time slot
+      // recorded (rare) is treated as not yet passed.
+      if (!booking.timeSlot) return false;
+
+      return (
+        this.parseTimeSlotToMinutes(
+          booking.timeSlot,
+        ) <= nowMinutes
+      );
+    };
+
+    /*
      * "Upcoming" means confirmed-or-pending with a
-     * real assigned date that hasn't passed. Leads
-     * awaiting an admin date land in `awaitingSchedule`
-     * instead of silently disappearing.
+     * real assigned date/time that hasn't passed yet.
+     * Leads awaiting an admin date land in
+     * `awaitingSchedule` instead of silently
+     * disappearing.
      */
     const upcoming = serialized.filter(
       (booking) =>
         booking.status !== 'cancelled' &&
         booking.status !== 'completed' &&
         !!booking.bookingDate &&
-        booking.bookingDate >= todayKey,
+        !hasBookingTimePassed(booking),
     );
 
     const awaitingSchedule = serialized.filter(
@@ -1270,7 +1313,40 @@ try {
       (booking) =>
         booking.status === 'completed' ||
         (!!booking.bookingDate &&
-          booking.bookingDate < todayKey),
+          hasBookingTimePassed(booking)),
+    );
+
+    /*
+     * The query above sorts by createdAt for a
+     * sensible default, but "next session" only
+     * makes sense sorted by when it's actually
+     * happening — otherwise whichever booking was
+     * made most recently would jump to the top even
+     * if a different one is happening sooner.
+     */
+    const byWhenItsHappening = (
+      a: { bookingDate?: string; timeSlot?: string },
+      b: { bookingDate?: string; timeSlot?: string },
+    ) => {
+      const dateCompare = (
+        a.bookingDate || ''
+      ).localeCompare(b.bookingDate || '');
+
+      if (dateCompare !== 0) return dateCompare;
+
+      return (
+        this.parseTimeSlotToMinutes(
+          a.timeSlot || '',
+        ) -
+        this.parseTimeSlotToMinutes(
+          b.timeSlot || '',
+        )
+      );
+    };
+
+    upcoming.sort(byWhenItsHappening);
+    past.sort(
+      (a, b) => -byWhenItsHappening(a, b),
     );
 
     const payments = serialized
@@ -1374,6 +1450,42 @@ try {
       return new Date()
         .toISOString()
         .slice(0, 10);
+    }
+  }
+
+  /*
+   * Minutes since midnight, right now, in the
+   * configured timezone — used to tell whether a
+   * TODAY session's time slot has already passed
+   * (date-only comparison isn't enough for that).
+   */
+  private getNowMinutesInTimezone(
+    timezone: string,
+  ) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).formatToParts(new Date());
+
+      const hour = Number(
+        parts.find((p) => p.type === 'hour')
+          ?.value ?? '0',
+      );
+
+      const minute = Number(
+        parts.find((p) => p.type === 'minute')
+          ?.value ?? '0',
+      );
+
+      return hour * 60 + minute;
+    } catch {
+      const now = new Date();
+      return (
+        now.getHours() * 60 + now.getMinutes()
+      );
     }
   }
 

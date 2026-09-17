@@ -1,8 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Header } from "@/components/Header";
-import { SiteFooter } from "@/components/SiteFooter";
 import { Reveal } from "@/components/Reveal";
 import {
   BookingConfig,
@@ -15,8 +13,8 @@ import {
   getBookingConfig,
 } from "@/lib/booking-api";
 import { buttonDark, eyebrow, sectionPadTop } from "@/lib/ui";
-import Link from "next/link";
 import { useUserAuth } from "@/components/UserAuthProvider";
+import { BookingAuthModal } from "@/components/BookingAuthModal";
 
 /* =========================================
    RAZORPAY — global type + script loader
@@ -114,7 +112,10 @@ function formatRupees(amount: number) {
 }
 
 export default function BookSessionPage() {
-  const { user, loading: authLoading } = useUserAuth();
+  const { user } = useUserAuth();
+
+  const [showAuthModal, setShowAuthModal] =
+    useState(false);
 
   const today = useMemo(() => new Date(), []);
   const todayKey = useMemo(() => formatDateKey(today), [today]);
@@ -470,8 +471,28 @@ export default function BookSessionPage() {
   /* =========================================
      PAYMENT / CONFIRM SUBMIT
   ========================================= */
-  const handlePaymentSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handlePaymentSubmit = (
+    event: FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
+
+    /*
+     * Everything up to this point (service, schedule,
+     * contact details) works anonymously — nothing is
+     * lost here. Only the actual booking call needs a
+     * signed-in account, so that's the one place we
+     * gate, via an inline modal rather than bouncing
+     * the visitor off the page.
+     */
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    void proceedWithBooking();
+  };
+
+  const proceedWithBooking = async () => {
     setFormError("");
     setPaymentError("");
 
@@ -527,6 +548,21 @@ export default function BookSessionPage() {
         order_id: order.data.orderId,
         prefill: { name, email, contact: phone || undefined },
         theme: { color: "#0a3d39" },
+        /*
+         * Deliberately NOT passing a custom
+         * `config.display.blocks` here. Razorpay only
+         * shows methods you explicitly list once you
+         * define custom blocks — everything else
+         * (UPI, EMI, Pay Later, whatever's enabled on
+         * the account) gets hidden, which is worse than
+         * doing nothing. Leaving this out means Checkout
+         * shows every payment method actually enabled on
+         * the Razorpay account, exactly as configured
+         * there — including UPI, once it's turned on in
+         * the Razorpay Dashboard (Settings → Payment
+         * Methods). That toggle lives on Razorpay's side,
+         * not in this code.
+         */
         handler: async (paymentResponse: {
           razorpay_payment_id: string;
           razorpay_order_id: string;
@@ -575,64 +611,13 @@ export default function BookSessionPage() {
   };
 
   /*
-   * Booking requires an account — the backend
-   * rejects anonymous booking requests, so gate the
-   * whole flow rather than letting someone fill the
-   * wizard in and fail at the last step.
+   * No upfront gate here on purpose — anonymous
+   * visitors fill the whole wizard normally.
+   * Sign-in is only requested right at the final
+   * "Confirm Booking" step (see handlePaymentSubmit),
+   * via an inline modal, so nothing they've typed is
+   * ever lost.
    */
-  if (authLoading) {
-    return (
-      <main className="bg-paper font-sans text-ink">
-        <Header />
-        <div className="grid min-h-[70vh] place-items-center px-5 text-sm text-[#59645e]">
-          Loading…
-        </div>
-        <SiteFooter />
-      </main>
-    );
-  }
-
-  if (!user) {
-    return (
-      <main className="bg-paper font-sans text-ink">
-        <Header />
-
-        <section className="grid min-h-[70vh] place-items-center px-[max(5vw,20px)] py-24">
-          <div className="w-full max-w-[460px] rounded-[26px] border border-ink/10 bg-cream p-9 text-center max-[480px]:p-6">
-            <p className={eyebrow}>BOOK A SESSION</p>
-
-            <h1 className="m-0 mb-4 font-serif text-[clamp(26px,3.5vw,36px)] font-medium leading-[1.15]">
-              Sign in to book your session
-            </h1>
-
-            <p className="mb-8 text-sm leading-[1.8] text-[#59645e]">
-              An account lets you keep every booking,
-              Zoom link and payment in one place — and
-              we&apos;ll let you know when new webinars open.
-            </p>
-
-            <div className="flex flex-col gap-3">
-              <Link
-                href="/login?next=/book-session"
-                className={buttonDark}
-              >
-                Sign in
-              </Link>
-
-              <Link
-                href="/register?next=/book-session"
-                className="inline-flex items-center justify-center rounded-full border border-ink/20 px-[22px] py-3 text-sm font-medium text-ink no-underline transition-colors hover:bg-ink/[0.04]"
-              >
-                Create an account
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        <SiteFooter />
-      </main>
-    );
-  }
 
   return (
     <main className="bg-paper font-sans text-ink">
@@ -1248,6 +1233,17 @@ export default function BookSessionPage() {
           </div>
         </div>
       </section>
+
+      {showAuthModal && (
+        <BookingAuthModal
+          defaultEmail={form.email}
+          onClose={() => setShowAuthModal(false)}
+          onAuthenticated={() => {
+            setShowAuthModal(false);
+            void proceedWithBooking();
+          }}
+        />
+      )}
 
     </main>
   );

@@ -3,6 +3,7 @@
 import {
   FormEvent,
   Suspense,
+  SyntheticEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -80,6 +81,19 @@ const TABS: { key: Tab; label: string; icon: any }[] =
       icon: UserRound,
     },
   ];
+
+function getTodayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(
+    now.getMonth() + 1,
+  ).padStart(2, "0")}-${String(
+    now.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function isToday(value?: string) {
+  return !!value && value === getTodayKey();
+}
 
 function formatDate(value?: string) {
   if (!value) return "—";
@@ -170,7 +184,7 @@ export function AccountDashboard() {
   return (
     <Suspense
       fallback={
-        <main className="grid min-h-screen place-items-center bg-[#f6f7f4] px-4 text-center text-xs text-[#76817c]">
+        <main className="grid min-h-screen place-items-center bg-[#f6f7f4] text-xs text-[#76817c]">
           Loading your account…
         </main>
       }
@@ -273,7 +287,7 @@ function AccountDashboardInner() {
 
   if (loading || !user) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f6f7f4] px-4 text-center text-xs text-[#76817c]">
+      <main className="grid min-h-screen place-items-center bg-[#f6f7f4] text-xs text-[#76817c]">
         Loading your account…
       </main>
     );
@@ -284,11 +298,11 @@ function AccountDashboardInner() {
   );
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#fbfaf6,#f2f4f0_60%)] px-4 py-8 sm:px-5 sm:py-12">
-      <div className="mx-auto mt-[25%] w-full max-w-[1080px] sm:mt-16 lg:mt-16">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#fbfaf6,#f2f4f0_60%)] px-5 pb-16 pt-[150px] max-[700px]:px-4 max-[700px]:pt-[130px]">
+      <div className="mx-auto w-full max-w-[1080px]">
         {/* HERO */}
 
-        <section className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-[#0b3a37] via-[#0d4a44] to-[#123f3a] p-5 text-white shadow-[0_30px_70px_-20px_rgba(11,58,55,.45)] sm:rounded-[28px] sm:p-7 md:p-9">
+        <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#0b3a37] via-[#0d4a44] to-[#123f3a] p-9 text-white shadow-[0_30px_70px_-20px_rgba(11,58,55,.45)] max-[600px]:p-6">
           <div
             aria-hidden
             className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full bg-[#c28b4d]/25 blur-[90px]"
@@ -304,24 +318,24 @@ function AccountDashboardInner() {
             className="pointer-events-none absolute inset-0 opacity-[0.04] [background-image:radial-gradient(#fff_1px,transparent_1px)] [background-size:22px_22px]"
           />
 
-          <div className="relative flex flex-col items-start gap-6 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/10 font-serif text-lg backdrop-blur-sm sm:h-16 sm:w-16 sm:text-2xl">
+          <div className="relative flex flex-wrap items-start justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/10 font-serif text-2xl backdrop-blur-sm">
                 {getInitials(user.name)}
               </div>
 
-              <div className="min-w-0">
+              <div>
                 <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[.22em] text-[#d2a873]">
                   <Sparkles size={11} />
                   My Account
                 </p>
 
-                <h1 className="mt-2 break-words font-serif text-[clamp(22px,6vw,36px)] leading-[1.1]">
+                <h1 className="mt-2 font-serif text-[clamp(24px,4vw,36px)] leading-[1.1]">
                   Hi, {user.name.split(" ")[0]}
                 </h1>
 
-                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-[#afc2bc]">
-                  <span className="break-all">{user.email}</span>
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#afc2bc]">
+                  <span>{user.email}</span>
 
                   {memberSince && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-[#cfe0d8]">
@@ -333,10 +347,10 @@ function AccountDashboardInner() {
               </div>
             </div>
 
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2.5">
+            <div className="flex w-full items-center gap-2.5 max-[420px]:flex-col min-[421px]:w-auto">
               <Link
                 href="/book-session"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-xs font-bold text-[#0b3b38] shadow-[0_8px_20px_rgba(0,0,0,.15)] transition hover:-translate-y-0.5 hover:bg-[#eef5f1]"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-xs font-bold text-[#0b3b38] shadow-[0_8px_20px_rgba(0,0,0,.15)] transition hover:-translate-y-0.5 hover:bg-[#eef5f1] min-[421px]:w-auto"
               >
                 <CalendarDays size={14} />
                 Book a session
@@ -348,7 +362,7 @@ function AccountDashboardInner() {
                   await signOut();
                   router.replace("/");
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/10"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/20 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/10 min-[421px]:w-auto"
               >
                 <LogOut size={14} />
                 Sign out
@@ -359,7 +373,7 @@ function AccountDashboardInner() {
 
         {/* TABS */}
 
-        <nav className="sticky top-0 z-20 mt-5 -mx-4 flex gap-1.5 overflow-x-auto border-b border-[#e2e6e2] bg-white/95 px-4 py-2.5 shadow-[0_10px_30px_rgba(37,56,49,.06)] backdrop-blur-md [scrollbar-width:none] sm:mx-0 sm:mt-6 sm:flex-wrap sm:overflow-visible sm:rounded-full sm:border sm:border-[#e2e6e2] sm:p-1.5 sm:[scrollbar-width:auto] [&::-webkit-scrollbar]:hidden">
+        <nav className="sticky top-24 z-20 mt-6 flex flex-wrap gap-1.5 rounded-2xl border border-[#e2e6e2] bg-white/90 p-1.5 shadow-[0_10px_30px_rgba(37,56,49,.06)] backdrop-blur-md max-[700px]:top-20">
           {TABS.map((item) => {
             const active = tab === item.key;
 
@@ -368,16 +382,14 @@ function AccountDashboardInner() {
                 key={item.key}
                 type="button"
                 onClick={() => setTab(item.key)}
-                className={`relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 sm:px-4 ${
+                className={`relative inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-semibold transition-all duration-200 max-[700px]:flex-none ${
                   active
                     ? "bg-[#0b3b38] text-white shadow-[0_6px_16px_rgba(11,59,56,.28)]"
                     : "text-[#52605a] hover:bg-[#f2f5f2]"
                 }`}
               >
                 <item.icon size={14} />
-                <span className="hidden xs:inline sm:inline">
-                  {item.label}
-                </span>
+                {item.label}
 
                 {item.key === "notifications" &&
                   unreadCount > 0 && (
@@ -403,11 +415,11 @@ function AccountDashboardInner() {
         )}
 
         {dataLoading ? (
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-6 grid grid-cols-4 gap-4 max-[900px]:grid-cols-2 max-[440px]:grid-cols-1">
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="h-[100px] animate-pulse rounded-2xl border border-[#e7ebe6] bg-white/70 sm:h-[118px]"
+                className="h-[118px] animate-pulse rounded-2xl border border-[#e7ebe6] bg-white/70"
               />
             ))}
           </div>
@@ -494,32 +506,122 @@ function OverviewTab({
 
   const nextUp = overview.upcoming[0];
 
+  /*
+   * Every session happening today with a Zoom link
+   * ready — surfaced above everything else so the
+   * visitor never has to hunt for the join link on
+   * the day it matters most.
+   */
+  const todaysSessions = overview.upcoming.filter(
+    (booking) =>
+      isToday(booking.bookingDate) &&
+      !!booking.zoomJoinUrl,
+  );
+
   return (
     <>
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+      {todaysSessions.length > 0 && (
+        <section className="relative mb-6 overflow-hidden rounded-2xl border border-[#bfe3d0] bg-gradient-to-br from-[#0d4a44] to-[#123f3a] p-6 text-white shadow-[0_16px_40px_rgba(13,74,68,.25)] max-[500px]:p-5">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-[#c28b4d]/20 blur-3xl"
+          />
+
+          <div className="relative space-y-4">
+            {todaysSessions.map((booking) => (
+              <div
+                key={booking._id}
+                role="button"
+                tabIndex={0}
+                onClick={() =>
+                  window.open(
+                    booking.zoomJoinUrl,
+                    "_blank",
+                    "noopener,noreferrer",
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" ||
+                    event.key === " "
+                  ) {
+                    event.preventDefault();
+                    window.open(
+                      booking.zoomJoinUrl,
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }
+                }}
+                className="flex cursor-pointer flex-wrap items-center justify-between gap-4 rounded-xl transition-colors hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#7fe3ab] opacity-75" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#7fe3ab]" />
+                  </span>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#bfe3d6]">
+                      Happening today
+                    </p>
+
+                    <p className="mt-1 font-serif text-lg leading-tight">
+                      {booking.sessionType}
+                      {booking.timeSlot && (
+                        <span className="ml-2 text-sm font-normal text-[#cfe0d8]">
+                          · {booking.timeSlot}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    window.open(
+                      booking.zoomJoinUrl,
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white px-5 py-3 text-xs font-bold text-[#0b3b38] shadow-[0_8px_20px_rgba(0,0,0,.18)] transition hover:-translate-y-0.5 hover:bg-[#eef5f1]"
+                >
+                  <Video size={14} />
+                  Join Now
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="grid grid-cols-4 gap-4 max-[900px]:grid-cols-2 max-[440px]:grid-cols-1">
         {cards.map((card) => (
           <article
             key={card.label}
-            className="group rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(37,56,49,.1)] sm:p-5"
+            className="group rounded-2xl border border-[#dce1dc] bg-white p-5 shadow-[0_8px_24px_rgba(37,56,49,.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(37,56,49,.1)]"
           >
             <div
-              className={`grid h-10 w-10 place-items-center rounded-xl transition-transform duration-200 group-hover:scale-105 sm:h-11 sm:w-11 ${card.accent}`}
+              className={`grid h-11 w-11 place-items-center rounded-xl transition-transform duration-200 group-hover:scale-105 ${card.accent}`}
             >
               <card.icon size={18} />
             </div>
 
-            <p className="mt-3 font-serif text-2xl text-[#172420] sm:mt-4 sm:text-3xl">
+            <p className="mt-4 font-serif text-3xl text-[#172420]">
               {card.value}
             </p>
 
-            <p className="mt-1 text-[11px] font-semibold text-[#5e6b65] sm:text-xs">
+            <p className="mt-1 text-xs font-semibold text-[#5e6b65]">
               {card.label}
             </p>
           </article>
         ))}
       </section>
 
-      <section className="mt-6 rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-6">
+      <section className="mt-6 rounded-2xl border border-[#dce1dc] bg-white p-6 shadow-[0_8px_24px_rgba(37,56,49,.04)]">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
             Next session
@@ -553,7 +655,7 @@ function OverviewTab({
       </section>
 
       {overview.awaitingSchedule.length > 0 && (
-        <section className="mt-6 rounded-2xl border border-[#e4cfaa] bg-[#fffaf1] p-4 shadow-[0_8px_24px_rgba(154,109,49,.06)] sm:p-6">
+        <section className="mt-6 rounded-2xl border border-[#e4cfaa] bg-[#fffaf1] p-6 shadow-[0_8px_24px_rgba(154,109,49,.06)]">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[.1em] text-[#9a6d31]">
             <Hourglass size={13} />
             Awaiting a date
@@ -597,16 +699,22 @@ function SessionsTab({
       title: "Upcoming",
       items: overview.upcoming,
       empty: "No upcoming sessions.",
+      showJoin: true,
     },
     {
       title: "Awaiting a date",
       items: overview.awaitingSchedule,
       empty: "Nothing awaiting scheduling.",
+      showJoin: true,
     },
     {
       title: "Past sessions",
       items: overview.past,
       empty: "No past sessions yet.",
+      // The session already happened — nothing to
+      // join anymore, even if a Zoom link was once
+      // attached to this booking.
+      showJoin: false,
     },
   ];
 
@@ -615,7 +723,7 @@ function SessionsTab({
       {groups.map((group) => (
         <section
           key={group.title}
-          className="rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-6"
+          className="rounded-2xl border border-[#dce1dc] bg-white p-6 shadow-[0_8px_24px_rgba(37,56,49,.04)]"
         >
           <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
             {group.title}
@@ -634,6 +742,7 @@ function SessionsTab({
                 <BookingCard
                   key={booking._id}
                   booking={booking}
+                  showJoin={group.showJoin}
                 />
               ))}
             </div>
@@ -646,23 +755,70 @@ function SessionsTab({
 
 function BookingCard({
   booking,
+  showJoin = true,
 }: {
   booking: MyBooking;
+  showJoin?: boolean;
 }) {
   const hasDate = !!booking.bookingDate;
+  const joinable = showJoin && !!booking.zoomJoinUrl;
+
+  function openZoom(
+    event?: SyntheticEvent,
+  ) {
+    event?.stopPropagation();
+
+    if (booking.zoomJoinUrl) {
+      window.open(
+        booking.zoomJoinUrl,
+        "_blank",
+        "noopener,noreferrer",
+      );
+    }
+  }
 
   return (
-    <article className="group relative overflow-hidden rounded-xl border border-[#e7ebe6] bg-[#fbfcfa] p-4 pl-5 transition-shadow hover:shadow-[0_6px_20px_rgba(37,56,49,.06)]">
+    <article
+      role={joinable ? "button" : undefined}
+      tabIndex={joinable ? 0 : undefined}
+      onClick={
+        joinable ? () => openZoom() : undefined
+      }
+      onKeyDown={
+        joinable
+          ? (event) => {
+              if (
+                event.key === "Enter" ||
+                event.key === " "
+              ) {
+                event.preventDefault();
+                openZoom();
+              }
+            }
+          : undefined
+      }
+      className={`group relative overflow-hidden rounded-xl border border-[#e7ebe6] bg-[#fbfcfa] p-4 pl-5 transition-all duration-200 ${
+        joinable
+          ? "cursor-pointer hover:-translate-y-0.5 hover:border-[#bfe3d0] hover:shadow-[0_10px_28px_rgba(13,74,68,.1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0d4a44]/40"
+          : "hover:shadow-[0_6px_20px_rgba(37,56,49,.06)]"
+      }`}
+    >
       <span
         className={`absolute left-0 top-0 h-full w-1 ${statusBar(
           booking.status,
         )}`}
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-serif text-base text-[#172420]">
+          <p className="flex flex-wrap items-center gap-2 font-serif text-base text-[#172420]">
             {booking.sessionType}
+
+            {isToday(booking.bookingDate) && (
+              <span className="rounded-full bg-[#0d4a44] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[.08em] text-white">
+                Today
+              </span>
+            )}
           </p>
 
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#76817c]">
@@ -693,7 +849,7 @@ function BookingCard({
         </div>
 
         <span
-          className={`inline-flex w-fit shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${statusTone(
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${statusTone(
             booking.status,
           )}`}
         >
@@ -701,19 +857,18 @@ function BookingCard({
         </span>
       </div>
 
-      {(booking.zoomJoinUrl ||
+      {(joinable ||
         booking.paymentStatus === "paid") && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#e7ebe6] pt-3">
-          {booking.zoomJoinUrl && (
-            <a
-              href={booking.zoomJoinUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0b3b38] px-3 py-2 text-[10px] font-bold text-white transition hover:bg-[#124c47]"
+          {joinable && (
+            <button
+              type="button"
+              onClick={openZoom}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0b3b38] px-3 py-2 text-[10px] font-bold text-white transition group-hover:bg-[#124c47]"
             >
               <Video size={12} />
               Join session
-            </a>
+            </button>
           )}
 
           {booking.paymentStatus === "paid" && (
@@ -741,7 +896,7 @@ function PaymentsTab({
 
   if (overview.payments.length === 0) {
     return (
-      <section className="rounded-2xl border border-[#dce1dc] bg-white p-8 text-center shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-10">
+      <section className="rounded-2xl border border-[#dce1dc] bg-white p-10 text-center shadow-[0_8px_24px_rgba(37,56,49,.04)]">
         <ReceiptText
           size={22}
           className="mx-auto text-[#c7cec9]"
@@ -757,7 +912,7 @@ function PaymentsTab({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[#dce1dc] bg-white shadow-[0_8px_24px_rgba(37,56,49,.04)]">
-      <div className="flex flex-col gap-1.5 border-b border-[#e7ebe6] bg-[#fbfcfa] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6">
+      <div className="flex items-center justify-between gap-3 border-b border-[#e7ebe6] bg-[#fbfcfa] px-6 py-4">
         <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
           Payment history
         </p>
@@ -772,19 +927,19 @@ function PaymentsTab({
         <table className="w-full min-w-[620px] text-left">
           <thead className="bg-[#fbfcfa] text-[10px] uppercase tracking-[.1em] text-[#8b948e]">
             <tr>
-              <th className="px-4 py-3 font-semibold sm:px-6">
+              <th className="px-6 py-3 font-semibold">
                 Session
               </th>
-              <th className="px-4 py-3 font-semibold sm:px-6">
+              <th className="px-6 py-3 font-semibold">
                 Date
               </th>
-              <th className="px-4 py-3 font-semibold sm:px-6">
+              <th className="px-6 py-3 font-semibold">
                 Amount
               </th>
-              <th className="px-4 py-3 font-semibold sm:px-6">
+              <th className="px-6 py-3 font-semibold">
                 Status
               </th>
-              <th className="px-4 py-3 font-semibold sm:px-6">
+              <th className="px-6 py-3 font-semibold">
                 Reference
               </th>
             </tr>
@@ -793,21 +948,21 @@ function PaymentsTab({
           <tbody className="divide-y divide-[#eef1ee] text-xs">
             {overview.payments.map((payment) => (
               <tr key={payment._id}>
-                <td className="px-4 py-4 font-semibold text-[#172420] sm:px-6">
+                <td className="px-6 py-4 font-semibold text-[#172420]">
                   {payment.sessionType}
                 </td>
 
-                <td className="px-4 py-4 text-[#65716b] sm:px-6">
+                <td className="px-6 py-4 text-[#65716b]">
                   {formatDate(
                     payment.bookingDate,
                   )}
                 </td>
 
-                <td className="px-4 py-4 font-semibold text-[#172420] sm:px-6">
+                <td className="px-6 py-4 font-semibold text-[#172420]">
                   ₹{payment.amountPaid}
                 </td>
 
-                <td className="px-4 py-4 sm:px-6">
+                <td className="px-6 py-4">
                   <span
                     className={`rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${
                       payment.paymentStatus ===
@@ -820,7 +975,7 @@ function PaymentsTab({
                   </span>
                 </td>
 
-                <td className="px-4 py-4 text-[10px] text-[#9aa39d] sm:px-6">
+                <td className="px-6 py-4 text-[10px] text-[#9aa39d]">
                   {payment.razorpayPaymentId ||
                     "—"}
                 </td>
@@ -848,7 +1003,7 @@ function NotificationsTab({
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-[#dce1dc] bg-white shadow-[0_8px_24px_rgba(37,56,49,.04)]">
-      <div className="flex items-center justify-between gap-3 border-b border-[#e7ebe6] bg-[#fbfcfa] px-4 py-4 sm:px-6">
+      <div className="flex items-center justify-between gap-3 border-b border-[#e7ebe6] bg-[#fbfcfa] px-6 py-4">
         <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
           Notifications
         </p>
@@ -865,7 +1020,7 @@ function NotificationsTab({
       </div>
 
       {notifications.length === 0 ? (
-        <p className="p-8 text-center text-xs text-[#87908c] sm:p-10">
+        <p className="p-10 text-center text-xs text-[#87908c]">
           Nothing here yet. We&apos;ll let you know
           when a new session opens.
         </p>
@@ -874,42 +1029,40 @@ function NotificationsTab({
           {notifications.map((item) => (
             <li
               key={item._id}
-              className={`flex flex-col gap-2 px-4 py-4 sm:flex-row sm:gap-3 sm:px-6 ${
+              className={`flex gap-3 px-6 py-4 ${
                 item.isRead
                   ? ""
                   : "bg-[#fbfaf5]"
               }`}
             >
-              <div className="flex gap-3">
-                <span
-                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                    item.isRead
-                      ? "bg-transparent"
-                      : "bg-[#c28b4d]"
-                  }`}
-                />
+              <span
+                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                  item.isRead
+                    ? "bg-transparent"
+                    : "bg-[#c28b4d]"
+                }`}
+              />
 
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-[#172420]">
-                    {item.title}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-[#172420]">
+                  {item.title}
+                </p>
+
+                {item.body && (
+                  <p className="mt-1 text-[11px] leading-5 text-[#76817c]">
+                    {item.body}
                   </p>
+                )}
 
-                  {item.body && (
-                    <p className="mt-1 text-[11px] leading-5 text-[#76817c]">
-                      {item.body}
-                    </p>
-                  )}
-
-                  <p className="mt-1.5 text-[10px] text-[#9aa39d]">
-                    {formatDateTime(item.createdAt)}
-                  </p>
-                </div>
+                <p className="mt-1.5 text-[10px] text-[#9aa39d]">
+                  {formatDateTime(item.createdAt)}
+                </p>
               </div>
 
               {item.link && (
                 <Link
                   href={item.link}
-                  className="w-fit shrink-0 self-start rounded-lg border border-[#dce1dc] px-3 py-1.5 text-[10px] font-semibold text-[#0b3b38] hover:bg-[#f2f5f2] sm:self-center"
+                  className="shrink-0 self-center rounded-lg border border-[#dce1dc] px-3 py-1.5 text-[10px] font-semibold text-[#0b3b38] hover:bg-[#f2f5f2]"
                 >
                   View
                 </Link>
@@ -1034,10 +1187,10 @@ function ProfileTab({
     "w-full rounded-xl border border-[#d9dfda] bg-[#fbfcfa] px-4 py-3 text-sm outline-none focus:border-[#a87843]";
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-2 gap-6 max-[820px]:grid-cols-1">
       <form
         onSubmit={handleProfileSubmit}
-        className="rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-6"
+        className="rounded-2xl border border-[#dce1dc] bg-white p-6 shadow-[0_8px_24px_rgba(37,56,49,.04)]"
       >
         <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
           Your details
@@ -1135,7 +1288,7 @@ function ProfileTab({
 
       <form
         onSubmit={handlePasswordSubmit}
-        className="h-fit rounded-2xl border border-[#dce1dc] bg-white p-4 shadow-[0_8px_24px_rgba(37,56,49,.04)] sm:p-6"
+        className="h-fit rounded-2xl border border-[#dce1dc] bg-white p-6 shadow-[0_8px_24px_rgba(37,56,49,.04)]"
       >
         <p className="text-xs font-semibold uppercase tracking-[.1em] text-[#5e6b65]">
           Change password

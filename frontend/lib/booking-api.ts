@@ -126,6 +126,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         "Content-Type": "application/json",
         ...(options?.headers || {}),
       },
+      // Booking creation requires a signed-in user —
+      // without this, the session cookie never reaches
+      // the backend and every request looks anonymous,
+      // even when the visitor is actually logged in.
+      credentials: "include",
       cache: "no-store",
     });
   } catch {
