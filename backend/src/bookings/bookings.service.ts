@@ -1734,8 +1734,31 @@ try {
      ADMIN — ALL BOOKINGS
   ======================================================= */
 
-  async findAll() {
-    return this.bookingModel
+  /*
+   * Every booking, newest first.
+   *
+   * Each booking also carries `isHistory`:
+   * true when its confirmed session date has
+   * already passed (in the business timezone).
+   * Admin UI uses it to move finished sessions
+   * out of the live list/calendar and into the
+   * History tab. Nothing is deleted — history
+   * stays fully viewable.
+   *
+   * Requests that are not yet assigned a date
+   * (bookingDate missing) are never history.
+   */
+  async findAll(): Promise<
+    Array<Record<string, any>>
+  > {
+    const settings =
+      await this.getOrCreateSettings();
+
+    const todayKey = this.getTodayKey(
+      settings.timezone,
+    );
+
+    const bookings = await this.bookingModel
       .find()
       .select(
         '-activeSlotKey -activeRegistrationKey',
@@ -1746,6 +1769,13 @@ try {
       })
       .lean()
       .exec();
+
+    return bookings.map((booking) => ({
+      ...booking,
+      isHistory:
+        !!booking.bookingDate &&
+        booking.bookingDate < todayKey,
+    }));
   }
 
   /* =======================================================
@@ -1781,6 +1811,10 @@ try {
   async getBookingsOverview() {
     const settings =
       await this.getOrCreateSettings();
+
+    const todayKey = this.getTodayKey(
+      settings.timezone,
+    );
 
     const [
       slots,
@@ -1935,6 +1969,8 @@ try {
         remainingSeats:
           slot.remainingSeats,
         isActive: slot.isActive,
+        isHistory:
+          slot.bookingDate < todayKey,
         price: resolvedPrice,
         isPaid: resolvedPrice > 0,
         zoomJoinUrl: slot.zoomJoinUrl,
@@ -2039,6 +2075,9 @@ try {
           registrations.length,
         remainingSeats: 0,
         isActive: false,
+        isHistory:
+          !!sample.bookingDate &&
+          sample.bookingDate < todayKey,
         price: 0,
         isPaid: false,
         zoomJoinUrl: undefined,
@@ -2593,12 +2632,22 @@ try {
     const settings =
       await this.getOrCreateSettings();
 
+    /*
+     * Dates that have already passed are not
+     * shown on the admin calendar anymore —
+     * they live on as booking history.
+     */
+    const todayKey = this.getTodayKey(
+      settings.timezone,
+    );
+
     const storedSlots =
       await this.slotModel
         .find({
           bookingDate: {
             $regex:
               `^${month}-`,
+            $gte: todayKey,
           },
         })
         .lean()

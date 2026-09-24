@@ -68,6 +68,14 @@ export type Booking = {
   zoomMeetingId?: string;
   zoomJoinUrl?: string;
 
+  /*
+   * Set by the backend: true when this booking's
+   * confirmed session date has already passed.
+   * Such bookings live in the History tab instead
+   * of the live list / calendar.
+   */
+  isHistory?: boolean;
+
   emailStatus?:
     | "pending"
     | "sent"
@@ -130,6 +138,7 @@ type OverviewSlot = {
   bookedCount: number;
   remainingSeats: number;
   isActive: boolean;
+  isHistory?: boolean;
   price: number;
   isPaid: boolean;
   zoomJoinUrl?: string;
@@ -240,6 +249,25 @@ function dateKey(date: Date) {
   const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+/*
+ * "Today" as YYYY-MM-DD in the business timezone
+ * (same one the backend uses), so a session is only
+ * treated as finished once the date has really
+ * changed there — not in the admin's browser zone.
+ */
+function todayInTimezone(timezone?: string) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone || "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    return dateKey(new Date());
+  }
 }
 
 function monthKey(date: Date) {
@@ -713,6 +741,76 @@ export function BookingsSection({
   const [config, setConfig] =
     useState<BookingConfig | null>(null);
 
+  /*
+   * Upcoming = live sessions. History = sessions
+   * whose date has passed (kept for reference).
+   */
+  const [listTab, setListTab] = useState<
+    "upcoming" | "history"
+  >("upcoming");
+
+  const todayKey = useMemo(
+    () => todayInTimezone(config?.timezone),
+    [config?.timezone],
+  );
+
+  const isPastBooking = useCallback(
+    (item: Booking) =>
+      typeof item.isHistory === "boolean"
+        ? item.isHistory
+        : !!item.bookingDate &&
+          item.bookingDate < todayKey,
+    [todayKey],
+  );
+
+  /*
+   * Bookings of the tab currently open. Every
+   * list/filter/count below works off this, so
+   * past sessions never leak into the live view.
+   */
+  const scopedItems = useMemo(
+    () =>
+      items.filter((item) =>
+        listTab === "history"
+          ? isPastBooking(item)
+          : !isPastBooking(item),
+      ),
+    [items, listTab, isPastBooking],
+  );
+
+  /*
+   * Session-wise overview: same rule — finished
+   * slots are dropped, and groups left with no live
+   * slot disappear.
+   */
+  const visibleOverview = useMemo(
+    () =>
+      overview
+        .map((group) => {
+          const slots = group.slots.filter(
+            (slot) => !slot.isHistory,
+          );
+
+          return {
+            ...group,
+            slots,
+            totalSlots: slots.length,
+            totalBookings: slots.reduce(
+              (sum, slot) =>
+                sum + slot.registrationCount,
+              0,
+            ),
+          };
+        })
+        .filter((group) => group.slots.length > 0),
+    [overview],
+  );
+
+  const historyCount = useMemo(
+    () => items.filter(isPastBooking).length,
+    [items, isPastBooking],
+  );
+
   const [selectedMonth, setSelectedMonth] =
     useState(() => monthKey(new Date()));
 
@@ -794,13 +892,13 @@ const [lastCreatedSlot, setLastCreatedSlot] =
 
   const stats = useMemo(
     () => ({
-      total: items.length,
-      pending: items.filter((x) => x.status === "pending").length,
-      confirmed: items.filter((x) => x.status === "confirmed").length,
-      completed: items.filter((x) => x.status === "completed").length,
-      cancelled: items.filter((x) => x.status === "cancelled").length,
+      total: scopedItems.length,
+      pending: scopedItems.filter((x) => x.status === "pending").length,
+      confirmed: scopedItems.filter((x) => x.status === "confirmed").length,
+      completed: scopedItems.filter((x) => x.status === "completed").length,
+      cancelled: scopedItems.filter((x) => x.status === "cancelled").length,
     }),
-    [items],
+    [scopedItems],
   );
 
   /* =========================
@@ -810,7 +908,7 @@ const [lastCreatedSlot, setLastCreatedSlot] =
   const sessionTypeOptions = useMemo(() => {
     const counts = new Map<string, number>();
 
-    items.forEach((item) => {
+    scopedItems.forEach((item) => {
       const label =
         typeof item.sessionType === "string" && item.sessionType.trim()
           ? item.sessionType.trim()
@@ -822,7 +920,7 @@ const [lastCreatedSlot, setLastCreatedSlot] =
     return Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([label, count]) => ({ label, count }));
-  }, [items]);
+  }, [scopedItems]);
 
   /* =========================
      BOOKING SEARCH/FILTER
@@ -831,7 +929,7 @@ const [lastCreatedSlot, setLastCreatedSlot] =
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return [...items]
+    const list = [...scopedItems]
       .filter((item) => {
         if (
           statusFilter !== "all" &&
@@ -926,7 +1024,18 @@ item.emailStatus,
     timeToMinutes(timeB)
   );
 });
-  }, [items, search, statusFilter, sessionTypeFilter]);
+
+    /* History reads newest-first. */
+    return listTab === "history"
+      ? list.reverse()
+      : list;
+  }, [
+    scopedItems,
+    listTab,
+    search,
+    statusFilter,
+    sessionTypeFilter,
+  ]);
 
   /* =========================================================
      LOAD SESSION-WISE OVERVIEW
@@ -1093,17 +1202,21 @@ if (firstSession) {
     };
   }, [selectedMonth]);
 
-  const todayKey = dateKey(new Date());
-
+  /*
+   * Past dates never show on the calendar — the
+   * backend already drops them, this is a second
+   * guard for the timezone edge.
+   */
   const openDateMap = useMemo(
     () =>
       new Map(
-        configuredDates.map((item) => [
-          item.bookingDate,
-          item,
-        ]),
+        configuredDates
+          .filter(
+            (item) => item.bookingDate >= todayKey,
+          )
+          .map((item) => [item.bookingDate, item]),
       ),
-    [configuredDates],
+    [configuredDates, todayKey],
   );
 
 
@@ -1773,7 +1886,12 @@ async function removeSlot(
   const upcomingPreview = useMemo(() => {
     if (selectedBooking) return selectedBooking;
 
-    const today = dateKey(new Date());
+    /*
+     * In the History tab every listed booking is
+     * already past, so the date filter below leaves
+     * nothing "upcoming" — only a clicked row shows.
+     */
+    const today = todayKey;
 
     return (
       [...dayFilteredItems]
@@ -1791,7 +1909,7 @@ async function removeSlot(
           ),
         )[0] || null
     );
-  }, [dayFilteredItems, selectedBooking]);
+  }, [dayFilteredItems, selectedBooking, todayKey]);
 
   /*
    * Fallback for the side panel when there's no upcoming
@@ -1807,8 +1925,9 @@ async function removeSlot(
    */
   const upcomingSlotPreview = useMemo(() => {
     if (upcomingPreview) return null;
+    if (listTab === "history") return null;
 
-    const today = dateKey(new Date());
+    const today = todayKey;
     const nowMinutes =
       new Date().getHours() * 60 +
       new Date().getMinutes();
@@ -1860,6 +1979,8 @@ async function removeSlot(
     upcomingPreview,
     sessionTypeFilter,
     selectedDate,
+    listTab,
+    todayKey,
   ]);
 
   return (
@@ -2061,7 +2182,15 @@ async function removeSlot(
                     "0",
                   )}`;
 
-                  const hasBookings = items.some(
+                  const isPastDay = key < todayKey;
+
+                  /*
+                   * Past days carry no dots: finished
+                   * sessions are history, not calendar.
+                   */
+                  const hasBookings =
+                    !isPastDay &&
+                    items.some(
                     (item) =>
                       item.bookingDate === key &&
                       (sessionTypeFilter === "all" ||
@@ -2080,10 +2209,21 @@ async function removeSlot(
                   const isSelected = selectedDate === key;
                   const isToday = key === todayKey;
 
+                  /*
+                   * Upcoming tab => only today/future days
+                   * are usable. History tab => only past
+                   * days are usable.
+                   */
+                  const dayDisabled =
+                    listTab === "history"
+                      ? !isPastDay
+                      : isPastDay;
+
                   return (
                     <button
                       type="button"
                       key={key}
+                      disabled={dayDisabled}
                       onClick={() => {
                         setSelectedDate(isSelected ? "" : key);
                         setSelectedBooking(null);
@@ -2091,9 +2231,11 @@ async function removeSlot(
                       className={`relative mx-auto grid aspect-square w-8 place-items-center rounded-lg text-xs font-semibold transition ${
                         isSelected
                           ? "bg-[#0b3b38] text-white"
-                          : isToday
-                            ? "bg-[#eef5f1] text-[#0b3b38]"
-                            : "text-[#53615b] hover:bg-[#eef3ef]"
+                          : dayDisabled
+                            ? "cursor-not-allowed text-[#c4cbc7] opacity-50"
+                            : isToday
+                              ? "bg-[#eef5f1] text-[#0b3b38]"
+                              : "text-[#53615b] hover:bg-[#eef3ef]"
                       }`}
                     >
                       {day}
@@ -2168,11 +2310,38 @@ async function removeSlot(
             <div className="rounded-[22px] border border-[#dce1dc] bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="font-serif text-lg text-[#172420]">
-                    Upcoming Sessions
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-[#8a948f]">
-                    {dayFilteredItems.length} bookings found
+                  <div className="inline-flex rounded-full border border-[#d9dfda] bg-[#f5f7f4] p-1">
+                    {(
+                      [
+                        ["upcoming", "Upcoming"],
+                        ["history", `History (${historyCount})`],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => {
+                          if (listTab === value) return;
+                          setListTab(value);
+                          setSelectedDate("");
+                          setSelectedBooking(null);
+                        }}
+                        className={`rounded-full px-4 py-1.5 text-[11px] font-semibold transition ${
+                          listTab === value
+                            ? "bg-[#0b3b38] text-white shadow-sm"
+                            : "text-[#5c6a63] hover:text-[#0b3b38]"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="mt-2 text-[11px] text-[#8a948f]">
+                    {dayFilteredItems.length}{" "}
+                    {listTab === "history"
+                      ? "past sessions"
+                      : "bookings found"}
                   </p>
                 </div>
 
@@ -2320,7 +2489,9 @@ async function removeSlot(
 
                 {dayFilteredItems.length === 0 && (
                   <div className="p-10 text-center text-sm text-[#7a8580]">
-                    No booking requests found.
+                    {listTab === "history"
+                      ? "No past sessions yet."
+                      : "No booking requests found."}
                   </div>
                 )}
               </div>
@@ -2333,7 +2504,9 @@ async function removeSlot(
             <div className="h-fit rounded-[22px] bg-[#0b3b38] p-5 text-white">
               {!upcomingPreview && !upcomingSlotPreview ? (
                 <div className="py-10 text-center text-xs text-[#9fc2b9]">
-                  No upcoming sessions yet.
+                  {listTab === "history"
+                    ? "Select a past session to see its details."
+                    : "No upcoming sessions yet."}
                 </div>
               ) : !upcomingPreview && upcomingSlotPreview ? (
                 <>
@@ -2480,7 +2653,11 @@ async function removeSlot(
               ) : (
                 <>
                   <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[.1em] text-[#bfe3d6]">
-                    {selectedBooking ? "Selected" : "Upcoming"}
+                    {selectedBooking
+                      ? isPastBooking(selectedBooking)
+                        ? "History"
+                        : "Selected"
+                      : "Upcoming"}
                   </span>
 
                   <p className="mt-4 font-serif text-xl">
@@ -2551,7 +2728,7 @@ async function removeSlot(
                   </div>
 
                   <div className="mt-6 space-y-2.5">
-                    {getSafeZoomUrl(upcomingPreview.zoomJoinUrl) ? (
+                    {isPastBooking(upcomingPreview) ? null : getSafeZoomUrl(upcomingPreview.zoomJoinUrl) ? (
                       <a
                         href={
                           getSafeZoomUrl(
@@ -2584,6 +2761,7 @@ async function removeSlot(
                       View Details
                     </button>
 
+                    {!isPastBooking(upcomingPreview) && (
                     <button
                       type="button"
                       disabled={updatingStatusId === upcomingPreview._id}
@@ -2595,6 +2773,7 @@ async function removeSlot(
                       <XCircle size={13} />
                       Cancel Booking
                     </button>
+                    )}
                   </div>
                 </>
               )}
@@ -3322,14 +3501,14 @@ async function removeSlot(
 
             {!overviewLoading && !activeSessionTitle && (
               <>
-                {overview.length === 0 && !overviewError && (
+                {visibleOverview.length === 0 && !overviewError && (
                   <div className="rounded-2xl border border-[#dce1dc] bg-white p-10 text-center text-sm text-[#7a8580]">
                     No sessions have been created yet.
                   </div>
                 )}
 
                 <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-2 max-[600px]:grid-cols-1">
-                  {overview.map((group) => (
+                  {visibleOverview.map((group) => (
                     <button
                       type="button"
                       key={group.title}
@@ -3406,7 +3585,7 @@ async function removeSlot(
                 </p>
 
                 <div className="mt-5 space-y-3">
-                  {overview
+                  {visibleOverview
                     .find((group) => group.title === activeSessionTitle)
                     ?.slots.map((slot) => (
                       <button
@@ -3452,7 +3631,7 @@ async function removeSlot(
                       </button>
                     ))}
 
-                  {overview.find((group) => group.title === activeSessionTitle)
+                  {visibleOverview.find((group) => group.title === activeSessionTitle)
                     ?.slots.length === 0 && (
                     <div className="rounded-2xl border border-[#dce1dc] bg-white p-8 text-center text-sm text-[#7a8580]">
                       No time slots for this session yet.
