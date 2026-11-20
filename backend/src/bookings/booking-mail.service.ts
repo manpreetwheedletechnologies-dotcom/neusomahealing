@@ -252,6 +252,56 @@ export class BookingMailService {
     }
   }
 
+  async notifyQrAdmin(input: {
+  bookingId: string;
+  name: string;
+  email: string;
+  utr: string;
+  amount: number;
+  proof: Buffer;
+  mime: string;
+}) {
+  const user = this.getRequiredConfig('SMTP_USER');
+  const transport = nodemailer.createTransport({
+    host: this.getRequiredConfig('SMTP_HOST'),
+    port: Number(this.getRequiredConfig('SMTP_PORT')),
+    secure: this.configService.get<string>('SMTP_SECURE') === 'true',
+    auth: { user, pass: this.getRequiredConfig('SMTP_PASS') },
+  });
+
+  const url = new URL(this.getRequiredConfig('QR_ADMIN_REVIEW_URL'));
+  url.searchParams.set('qrReview', input.bookingId);
+
+  const delivery = await transport.sendMail({
+    from: this.configService.get<string>('MAIL_FROM_EMAIL') || user,
+    to: this.getRequiredConfig('QR_ADMIN_EMAIL'),
+    subject: `Review webinar payment · ₹${input.amount}`,
+    text: [
+      `Attendee: ${input.name} (${input.email})`,
+      `Amount: ₹${input.amount}`,
+      `UPI reference: ${input.utr}`,
+      `Review and confirm booking: ${url.href}`,
+    ].join('\n'),
+    html: `<p>A webinar payment of ₹${input.amount} is awaiting verification.</p>
+      <p>The attendee's payment screenshot is attached.</p>
+      <p><a href="${url.href}">Review and confirm booking</a></p>`,
+    attachments: [{
+      filename: input.mime === 'image/png' ? 'payment.png' : 'payment.jpg',
+      content: input.proof,
+      contentType: input.mime,
+    }],
+  });
+
+  if (!delivery.accepted?.length) {
+  throw new Error('SMTP did not accept the QR review email for delivery.');
+}
+
+this.logger.log(
+  `QR admin email accepted for booking ${input.bookingId}; ` +
+  `messageId=${delivery.messageId}`,
+);
+}
+
   private getRequiredConfig(
     key: string,
   ): string {

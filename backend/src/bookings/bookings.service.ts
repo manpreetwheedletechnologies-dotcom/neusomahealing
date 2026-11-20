@@ -101,6 +101,205 @@ private readonly zoomService:
   AudienceService,
 ) {}
 
+
+
+async submitQr(
+  userId: string,
+  body: Record<string, string>,
+  proof: Buffer,
+) {
+  const value = (key: string) =>
+    typeof body[key] === 'string' ? body[key].trim() : '';
+
+  const slotId = value('slotId');
+  const name = value('name');
+  const email = value('email').toLowerCase();
+  const phone = value('phone');
+  const utr = value('utr').toUpperCase();
+
+  if (!Types.ObjectId.isValid(slotId) || name.length < 2 || name.length > 80 ||
+      email.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      (phone && !/^[0-9+()\-\s]{7,24}$/.test(phone)) ||
+      !/^[0-9]{12}$/.test(utr)) {
+    throw new BadRequestException(
+      'Check your contact details and enter the 12-digit UPI reference number.',
+    );
+  }
+
+  const png = proof.subarray(0, 8).equals(
+    Buffer.from('89504e470d0a1a0a', 'hex'),
+  );
+  const jpeg = proof.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'));
+
+  if ((!png && !jpeg) || proof.length > 2 * 1024 * 1024) {
+    throw new BadRequestException('Upload a PNG or JPG under 2 MB.');
+  }
+
+  const settings = await this.getOrCreateSettings();
+  let bookingId = '';
+  let amount = 0;
+
+  try {
+    await this.bookingModel.db.transaction(async (session) => {
+      const slot = await this.slotModel.findOne({
+        _id: slotId,
+        isActive: true,
+        bookingMode: 'webinar',
+        paymentMethod: 'manual_qr',
+        remainingSeats: { $gt: 0 },
+      }).session(session);
+
+      if (!slot) throw new ConflictException('This QR slot is unavailable.');
+
+      const service = settings.sessionTypes.find(
+        (item) => item.isActive && item.title === slot.sessionType,
+      );
+      if (!service) throw new BadRequestException('Session unavailable.');
+
+      this.validateBookingDate(slot.bookingDate, settings.maxMonthsAhead);
+      this.validateFutureTime(slot.bookingDate, slot.timeSlot);
+      amount = this.resolveSlotPrice(slot.price, service.price);
+      if (!(amount > 0)) throw new BadRequestException('Invalid QR price.');
+
+      const [booking] = await this.bookingModel.create([{
+        userId: new Types.ObjectId(userId),
+        slotId: slot._id,
+        name, email, phone: phone || undefined,
+        sessionType: slot.sessionType,
+        bookingDate: slot.bookingDate,
+        timeSlot: slot.timeSlot,
+        bookingMode: 'webinar',
+        status: 'pending',
+        paymentStatus: 'verification_pending',
+        manualPaymentMethod: 'manual_qr',
+        activeRegistrationKey: `${slot._id}|${email}`,
+        qrAmount: amount,
+        qrUtr: utr,
+        qrProof: proof,
+        qrProofMime: png ? 'image/png' : 'image/jpeg',
+      }], { session });
+
+      await this.slotModel.updateOne(
+        { _id: slot._id },
+        { $inc: { remainingSeats: -1, bookedCount: 1 } },
+        { session },
+      );
+      bookingId = booking._id.toString();
+    });
+  } catch (error) {
+    if (this.isDuplicateKeyError(error)) {
+      throw new ConflictException(
+        'This payment reference or attendee registration already exists.',
+      );
+    }
+    throw error;
+  }
+
+  // The request is already saved. An SMTP failure must not cause
+  // the user to submit the same payment a second time.
+  try {
+    await this.bookingMailService.notifyQrAdmin({
+      bookingId, name, email, utr, amount, proof,
+      mime: png ? 'image/png' : 'image/jpeg',
+    });
+  } catch (error: unknown) {
+  const reason =
+    error instanceof Error ? error.message : 'Unknown mail delivery error';
+
+  this.logger.error(
+    `QR admin notification failed for booking ${bookingId}: ${reason}`,
+  );
+}
+
+  return { success: true, bookingId, status: 'under_review' };
+}
+
+async listPendingQr() {
+  return this.bookingModel.find({
+    manualPaymentMethod: 'manual_qr',
+    paymentStatus: 'verification_pending',
+    status: 'pending',
+  }).select('name email sessionType bookingDate timeSlot qrAmount +qrUtr')
+    .sort({ createdAt: 1 }).lean();
+}
+
+async getQrProof(id: string) {
+  if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID.');
+  const row = await this.bookingModel.findOne({
+    _id: id, manualPaymentMethod: 'manual_qr',
+  }).select('+qrProof +qrProofMime');
+  if (!row?.qrProof) throw new NotFoundException('Screenshot unavailable.');
+  return {
+    src: `data:${row.qrProofMime};base64,${row.qrProof.toString('base64')}`,
+  };
+}
+
+async reviewQr(id: string, approve: boolean) {
+  if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID.');
+
+  const pendingFilter = {
+    _id: id,
+    manualPaymentMethod: 'manual_qr',
+    paymentStatus: 'verification_pending',
+    status: 'pending',
+  };
+  const booking = await this.bookingModel.findOne(pendingFilter);
+  if (!booking) throw new ConflictException('This request is already reviewed.');
+
+  if (!approve) {
+    await this.bookingModel.db.transaction(async (session) => {
+      const result = await this.bookingModel.updateOne(pendingFilter, {
+        $set: { status: 'cancelled', paymentStatus: 'failed' },
+        $unset: { activeRegistrationKey: 1 },
+      }, { session });
+      if (!result.modifiedCount) throw new ConflictException('Already reviewed.');
+      await this.slotModel.updateOne({ _id: booking.slotId }, {
+        $inc: { remainingSeats: 1, bookedCount: -1 },
+      }, { session });
+    });
+    return { success: true, message: 'Request rejected. Seat released.' };
+  }
+
+  const slot = await this.slotModel.findOne({
+    _id: booking.slotId, isActive: true,
+  });
+  if (!slot) throw new ConflictException('The session slot is unavailable.');
+
+  const settings = await this.getOrCreateSettings();
+  this.validateFutureTime(slot.bookingDate, slot.timeSlot);
+  const service = this.findActiveSession(settings, slot.sessionType);
+  const meeting = await this.ensureZoomMeetingForSlot(
+  slot, service.duration, settings.timezone,
+);
+  if (!meeting.joinUrl) throw new ConflictException('Webinar link unavailable.');
+
+  const updated = await this.bookingModel.findOneAndUpdate(pendingFilter, {
+    $set: {
+      status: 'confirmed', paymentStatus: 'paid', amountPaid: booking.qrAmount,
+      zoomMeetingId: meeting.meetingId, zoomJoinUrl: meeting.joinUrl,
+      emailStatus: 'pending',
+    },
+  }, { new: true });
+  if (!updated) throw new ConflictException('This request is already reviewed.');
+
+  try {
+    await this.bookingMailService.sendBookingConfirmation({
+      name: updated.name, email: updated.email,
+      sessionType: slot.sessionType, bookingDate: slot.bookingDate,
+      timeSlot: slot.timeSlot, timezone: settings.timezone || 'Asia/Kolkata',
+      zoomJoinUrl: meeting.joinUrl,
+    });
+  } catch {
+    await this.bookingModel.updateOne({ _id: id }, {
+      $set: { emailStatus: 'failed' },
+    });
+    return { success: true, message: 'Booking confirmed. Email delivery failed.' };
+  }
+
+  await this.bookingModel.updateOne({ _id: id }, { $set: { emailStatus: 'sent' } });
+  return { success: true, message: 'Booking confirmed. Email sent.' };
+}
+
   /* =======================================================
      PUBLIC CONFIG
   ======================================================= */
@@ -309,6 +508,26 @@ private readonly zoomService:
   };
 }
 
+async getSlotPaymentQr(id: string): Promise<Buffer> {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new BadRequestException('Invalid session slot.');
+  }
+
+  const slot = await this.slotModel.findOne({
+    _id: id,
+    isActive: true,
+    paymentMethod: 'manual_qr',
+    hasCustomPaymentQr: true,
+  }).select('+paymentQrImage').lean();
+
+  if (!slot?.paymentQrImage) {
+    throw new NotFoundException('Payment QR is unavailable for this slot.');
+  }
+
+  const prefix = 'data:image/png;base64,';
+  return Buffer.from(slot.paymentQrImage.slice(prefix.length), 'base64');
+}
+
   /* =======================================================
      PUBLIC DATE AVAILABILITY
   ======================================================= */
@@ -452,6 +671,9 @@ const storedSlots =
 
           isPaid:
             price > 0,
+
+          paymentMethod: slot.paymentMethod ?? 'razorpay',
+          hasCustomPaymentQr: slot.hasCustomPaymentQr === true,
         };
       });
 
@@ -580,6 +802,10 @@ const storedSlots =
         'The selected session slot is no longer available.',
       );
     }
+
+    if (slot.paymentMethod === 'manual_qr') {
+  throw new BadRequestException('Submit payment proof for this QR session.');
+}
 
     /*
      * IMPORTANT: this specific slot's own price
@@ -715,6 +941,10 @@ const storedSlots =
         'The selected session slot is no longer available.',
       );
     }
+
+    if (slot.paymentMethod === 'manual_qr') {
+  throw new BadRequestException('Submit payment proof for this QR session.');
+}
 
     this.validateBookingDate(
       slot.bookingDate,
@@ -2197,6 +2427,10 @@ try {
       );
     }
 
+    if (booking.paymentStatus === 'verification_pending') {
+  throw new BadRequestException('Use the QR payment review actions.');
+}
+
     if (
       booking.status ===
       status
@@ -2857,6 +3091,30 @@ try {
         : null;
 
     try {
+
+      const paymentQrImage = dto.paymentQrImage;
+
+if (paymentQrImage !== undefined) {
+  if (dto.paymentMethod !== 'manual_qr') {
+    throw new BadRequestException(
+      'A custom QR can only be uploaded for UPI QR payments.',
+    );
+  }
+
+  const prefix = 'data:image/png;base64,';
+  const bytes = Buffer.from(paymentQrImage.slice(prefix.length), 'base64');
+  const pngSignature = Buffer.from('89504e470d0a1a0a', 'hex');
+
+  if (
+    !paymentQrImage.startsWith(prefix) ||
+    bytes.length < 24 ||
+    bytes.length > 64 * 1024 ||
+    !bytes.subarray(0, 8).equals(pngSignature) ||
+    bytes.toString('ascii', 12, 16) !== 'IHDR'
+  ) {
+    throw new BadRequestException('Upload a valid QR image under 64 KB.');
+  }
+}
       const slot =
         await this.slotModel.create(
           {
@@ -2881,8 +3139,15 @@ try {
             isActive:
               true,
 
-            price:
-              slotPrice,
+            price: slotPrice,
+
+            paymentMethod: dto.paymentMethod ?? 'razorpay',
+
+            hasCustomPaymentQr: Boolean(paymentQrImage),
+...(paymentQrImage ? { paymentQrImage } : {}),
+
+              
+        
           },
         );
 

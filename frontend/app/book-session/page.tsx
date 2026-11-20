@@ -11,10 +11,12 @@ import {
   getBookingAvailability,
   getBookingCalendar,
   getBookingConfig,
+  getSlotPaymentQrUrl,
 } from "@/lib/booking-api";
 import { buttonDark, eyebrow, sectionPadTop } from "@/lib/ui";
 import { useUserAuth } from "@/components/UserAuthProvider";
 import { BookingAuthModal } from "@/components/BookingAuthModal";
+import QrPaymentForm from "@/components/QrPaymentForm";
 
 /* =========================================
    RAZORPAY — global type + script loader
@@ -378,6 +380,10 @@ export default function BookSessionPage() {
   const sessionPrice = selectedSlot ? selectedSlot.price : selectedSession?.price || 0;
   const requiresPayment = sessionPrice > 0;
 
+  const isQr = requiresPayment && selectedSlot?.paymentMethod === "manual_qr";
+const [showQr, setShowQr] = useState(false);
+useEffect(() => { setShowQr(false); }, [selectedSlot?.slotId]);
+
   /* =========================================
      STEP VALIDATION / NAVIGATION
   ========================================= */
@@ -512,6 +518,11 @@ export default function BookSessionPage() {
       setFormError("Please enter a valid phone number.");
       return;
     }
+
+    if (isQr) {
+  setShowQr(true);
+  return;
+}
 
     /*
      * Free session — skip Razorpay entirely.
@@ -1011,6 +1022,17 @@ export default function BookSessionPage() {
                 )}
 
                 {step === "payment" && (
+                  showQr && isQr && selectedSlot ? (
+                <QrPaymentForm
+  key={selectedSlot.slotId}
+  slotId={selectedSlot.slotId}
+  qrImageUrl={getSlotPaymentQrUrl(selectedSlot)}
+  amount={sessionPrice}
+  name={form.name}
+  email={form.email}
+  phone={form.phone}
+/>
+                  ) : (
                   <form onSubmit={handlePaymentSubmit} noValidate>
                     <h2 className="mb-4 font-serif text-xl font-medium">Your Details &amp; Payment</h2>
 
@@ -1168,6 +1190,7 @@ export default function BookSessionPage() {
                       </p>
                     )}
                   </form>
+                )
                 )}
 
                 {step === "confirm" && (
