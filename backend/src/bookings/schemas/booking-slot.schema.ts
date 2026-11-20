@@ -17,6 +17,20 @@ export type BookingMode =
   collection: 'booking_slots',
 })
 export class BookingSlot {
+  
+  @Prop({
+  type: String,
+  enum: ['razorpay', 'manual_qr'],
+  default: 'razorpay',
+})
+paymentMethod?: 'razorpay' | 'manual_qr';
+
+@Prop({ type: String, select: false })
+paymentQrImage?: string;
+
+@Prop({ type: Boolean, default: false })
+hasCustomPaymentQr?: boolean;
+
   @Prop({
     required: true,
     match: /^\d{4}-\d{2}-\d{2}$/,

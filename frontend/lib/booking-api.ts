@@ -38,6 +38,8 @@ export type BookingSlot = {
   bookedCount: number;
   remainingSeats: number;
   status: "available" | "full" | "unavailable";
+  paymentMethod?: "razorpay" | "manual_qr";
+  hasCustomPaymentQr?: boolean;
 
   /*
    * Effective price for THIS exact slot — may
@@ -115,6 +117,14 @@ export type PaymentOrder = {
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
   "http://localhost:4000";
+
+  export function getSlotPaymentQrUrl(slot: BookingSlot): string {
+  if (!slot.hasCustomPaymentQr) {
+    return "/payments/webinar-upi.png";
+  }
+
+  return `${API_URL}/bookings/slots/${encodeURIComponent(slot.slotId)}/payment-qr`;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   let response: Response;

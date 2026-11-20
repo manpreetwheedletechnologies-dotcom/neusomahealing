@@ -10,7 +10,13 @@ import {
   Query,
   Req,
   UseGuards,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
+  Header,
+  StreamableFile
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 
@@ -42,6 +48,20 @@ export class BookingsController {
   /* =======================================================
      PUBLIC
   ======================================================= */
+  
+  
+
+  @Get('slots/:id/payment-qr')
+@Header('Cache-Control', 'no-store')
+async slotPaymentQr(@Param('id') id: string) {
+  const bytes = await this.bookingsService.getSlotPaymentQr(id);
+
+  return new StreamableFile(bytes, {
+    type: 'image/png',
+    length: bytes.length,
+  });
+}
+
 
   @Get('config')
   getConfig() {
@@ -285,5 +305,47 @@ removeDateSlots(
   );
 }
 
+
+
+@Post('qr/submit')
+@UseGuards(UserAuthGuard)
+@UseInterceptors(FileInterceptor('proof', {
+  limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 6 },
+}))
+submitQr(
+  @Req() req: UserRequest,
+  @UploadedFile() file: { buffer: Buffer } | undefined,
+  @Body() body: Record<string, string>,
+) {
+  if (!file?.buffer?.length) {
+    throw new BadRequestException('Upload your payment screenshot.');
+  }
+
+  return this.bookingsService.submitQr(req.user!.id, body, file.buffer);
+}
+
+@Get('admin/qr/pending')
+@UseGuards(AdminAuthGuard)
+listQr() {
+  return this.bookingsService.listPendingQr();
+}
+
+@Get('admin/qr/:id/proof')
+@UseGuards(AdminAuthGuard)
+qrProof(@Param('id') id: string) {
+  return this.bookingsService.getQrProof(id);
+}
+
+@Post('admin/qr/:id/confirm')
+@UseGuards(AdminAuthGuard)
+confirmQr(@Param('id') id: string) {
+  return this.bookingsService.reviewQr(id, true);
+}
+
+@Post('admin/qr/:id/reject')
+@UseGuards(AdminAuthGuard)
+rejectQr(@Param('id') id: string) {
+  return this.bookingsService.reviewQr(id, false);
+}
  
 }

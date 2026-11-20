@@ -100,6 +100,21 @@ export class CreateBookingSlotDto {
   @MaxLength(120)
   sessionType: string;
 
+
+  @IsOptional()
+@IsIn(['razorpay', 'manual_qr'])
+paymentMethod?: 'razorpay' | 'manual_qr';
+
+@IsOptional()
+@IsString()
+@MaxLength(87_406, {
+  message: 'QR image must be 64 KB or smaller after processing.',
+})
+@Matches(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/, {
+  message: 'QR image must be a valid PNG.',
+})
+paymentQrImage?: string;
+
   /*
    * Individual sessions will always be
    * forced to capacity 1 in service.

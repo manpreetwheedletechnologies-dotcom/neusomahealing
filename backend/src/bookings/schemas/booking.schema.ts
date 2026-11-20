@@ -173,10 +173,25 @@ activeRegistrationKey?: string;
    */
   @Prop({
     type: String,
-    enum: ['not_required', 'paid', 'failed'],
+    enum: ['not_required', 'paid', 'failed', 'verification_pending'],
     default: 'not_required',
   })
-  paymentStatus?: 'not_required' | 'paid' | 'failed';
+  paymentStatus?: 'not_required' | 'paid' | 'failed' | 'verification_pending';
+
+  @Prop({ type: String, enum: ['manual_qr'] })
+manualPaymentMethod?: 'manual_qr';
+
+@Prop({ type: String, unique: true, sparse: true, select: false })
+qrUtr?: string;
+
+@Prop({ type: Buffer, select: false })
+qrProof?: Buffer;
+
+@Prop({ type: String, select: false })
+qrProofMime?: string;
+
+@Prop({ type: Number })
+qrAmount?: number;
 
   @Prop({ min: 0 })
   amountPaid?: number;

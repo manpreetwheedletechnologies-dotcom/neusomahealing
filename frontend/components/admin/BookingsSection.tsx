@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 
 import { apiRequest } from "@/lib/api";
+import QrPaymentReviews from "./QrPaymentReviews";
+import SlotQrPicker from "./SlotQrPicker";
 
 export type BookingStatus =
   | "pending"
@@ -843,10 +845,7 @@ export function BookingsSection({
 
  
 
-const [
-  selectedSessionType,
-  setSelectedSessionType,
-] = useState("");
+const [selectedSessionType, setSelectedSessionType,] = useState("");
 
 const [customTime, setCustomTime] =
   useState("");
@@ -860,6 +859,14 @@ const [capacity, setCapacity] =
 
 const [priceMode, setPriceMode] =
   useState<"free" | "paid">("free");
+
+
+
+const [paymentMethod, setPaymentMethod] =
+  useState<"razorpay" | "manual_qr">("razorpay");
+  const [customQrImage, setCustomQrImage] = useState("");
+const [qrReady, setQrReady] = useState(true);
+
 
 const [priceAmount, setPriceAmount] =
   useState("");
@@ -1221,7 +1228,7 @@ if (firstSession) {
 
 
   const selectedSession =
-  useMemo(() => {
+   useMemo(() => {
     return (
       config?.sessionTypes.find(
         (item) =>
@@ -1233,6 +1240,16 @@ if (firstSession) {
     config,
     selectedSessionType,
   ]);
+
+  const usesManualQr =
+  priceMode === "paid" &&
+  selectedSession?.bookingMode === "webinar" &&
+  paymentMethod === "manual_qr";
+
+useEffect(() => {
+  setCustomQrImage("");
+  setQrReady(true);
+}, [usesManualQr, selectedDate, selectedSessionType]);
 
 const selectedDateConfig =
   selectedDate
@@ -1297,7 +1314,16 @@ function selectCalendarDate(
      SAVE DATE
   ========================================================= */
 
+
+  
+
 async function createSlot() {
+
+  if (usesManualQr && !qrReady) {
+  setSlotError("Choose a valid QR image or select Use existing QR.");
+  return;
+}
+
   if (!selectedDate) {
     setSlotError(
       "Please select a date first.",
@@ -1405,12 +1431,27 @@ async function createSlot() {
 
               price:
                 slotPrice,
+
+              paymentMethod:
+                priceMode === "paid" && selectedSession?.bookingMode === "webinar"
+                ? paymentMethod
+                : "razorpay",
+
+                ...(usesManualQr && customQrImage
+  ? { paymentQrImage: customQrImage }
+  : {}),
             }),
+            
         },
       );
 
     const created =
       response.data;
+
+      setPaymentMethod("razorpay");
+
+      setCustomQrImage("");
+setQrReady(true);
 
     /*
      * Update calendar + selected date
@@ -2022,6 +2063,9 @@ async function removeSlot(
             </div>
           </div>
         </div>
+
+         <QrPaymentReviews />
+
 
         {/* =================================================
             OUR SERVICES
@@ -3216,6 +3260,34 @@ async function removeSlot(
     </div>
   )}
 
+
+  {priceMode === "paid" && selectedSession?.bookingMode === "webinar" && (
+  <label className="mt-4 block text-sm font-medium">
+    Payment method
+    <select
+      className="mt-2 w-full rounded-xl border px-3 py-2"
+      value={paymentMethod}
+      onChange={(e) =>
+        setPaymentMethod(
+          e.target.value === "manual_qr" ? "manual_qr" : "razorpay"
+        )
+      }
+    >
+      <option value="razorpay">Razorpay payment gateway</option>
+      <option value="manual_qr">UPI QR · manual verification</option>
+    </select>
+  </label>
+)}
+
+{usesManualQr && (
+  <SlotQrPicker
+    key={`${selectedDate}-${selectedSessionType}`}
+    image={customQrImage}
+    onChange={setCustomQrImage}
+    onReadyChange={setQrReady}
+  />
+)}
+
   {priceMode === "free" && (
     <p className="mt-2 text-[10px] leading-4 text-[#85908b]">
       This session slot will not require any payment,
@@ -3278,10 +3350,11 @@ async function removeSlot(
 <button
   type="button"
   disabled={
-    slotSaving ||
-    !selectedSessionType ||
-    !customTime
-  }
+  slotSaving ||
+  !selectedSessionType ||
+  !customTime ||
+  (usesManualQr && !qrReady)
+}
   onClick={() =>
     void createSlot()
   }
